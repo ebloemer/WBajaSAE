@@ -1,0 +1,11 @@
+{
+  "additionalFiles": "",
+  "builtInToolsFolders": "",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:esp32doit-devkit-v1:FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=all",
+  "hardwareFolders": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages",
+  "otherLibrariesFolders": "C:\\Users\\dying\\Documents\\Arduino\\libraries",
+  "runtime.ide.version": "10607",
+  "sketchLocation": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\workingCompCode"
+}

@@ -5,8 +5,8 @@ HardwareSerial Onboard(0); // UART0
 
 // Pin Assignments *DO NOT CHANGE* ----------------------------------------------------------------------------
 
-//#define linkRx 3
-//#define linkTx 1
+#define linkRx 3
+#define linkTx 1
 #define engineSensor  12
 #define batterySensor 36
 #define brakeInput    27
