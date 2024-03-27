@@ -2,6 +2,7 @@
     "configuration": "FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=all",
     "board": "esp32:esp32:esp32doit-devkit-v1",
     "programmer": "esptool",
-    "sketch": "workingCompCode\\workingCompCode.ino",
-    "output": "./build"
+    "sketch": "onboardCode\\onboardCode.ino",
+    "output": "./build",
+    "port": "COM7"
 }
