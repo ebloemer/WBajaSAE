@@ -29,6 +29,9 @@ HardwareSerial Onboard(0); // UART0
 // Battery variables:
 int rawBattery;
 int batPercent;
+const int batSamples = 200;
+int batLogger[batSamples];
+int batIndex = 0;
 
 // Engine RPM variables:
 unsigned long pulseTime;
@@ -68,6 +71,7 @@ const int iterationInterval = 5;
 // Function prototypes --------------------------------------------------------------------
 
 void batRead();
+void updateBatAverage(int newValue);
 void RPMRead();
 void rpmCalculate();
 void launch();
@@ -81,6 +85,11 @@ void exportOnboardData();
 void setup() {
   // Initialize the Onboard serial communication at a baud rate of 115200
   Onboard.begin(115200, SERIAL_8N1, linkRx, linkTx);
+
+  // Initialize battery samples array
+  for (int i = 0; i < batSamples; i++) {
+    batLogger[i] = 0;
+  }
 
   // Set the pin modes for the motor control pins
   pinMode(motorForwardA, OUTPUT);
@@ -117,11 +126,26 @@ void loop() {
   }
 }
 
-// Read battery voltage and calculate battery percentage
+// Function to read battery voltage and calculate battery percentage
 void batRead() {
-  rawBattery = analogRead(batterySensor);
-  // Calibrate the reading to calculate battery percentage
-  batPercent = map(rawBattery, 1830, 2680, 0, 99);
+
+  int rawBattery = analogRead(batterySensor);
+
+  // Calibrate the reading
+  updateBatAverage(rawBattery);
+}
+
+// Function to update moving average of PWM samples
+void updateBatAverage(int newValue) {
+  batLogger[batIndex] = newValue;
+  batIndex = (batIndex + 1) % batSamples;
+  int sum = 0;
+
+  for (int i = 0; i < batSamples; i++) {
+    sum += batLogger[i];
+  }
+
+  batPercent = map((sum / batSamples), 2150, 3180, 0, 99);
 }
 
 // Read RPM from engine sensor

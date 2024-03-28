@@ -217,6 +217,8 @@
                 "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\tools\\sdk\\esp32\\dio_qspi\\include",
                 "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\cores\\esp32",
                 "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\variants\\doitESP32devkitV1",
+                "C:\\Users\\dying\\Documents\\Arduino\\libraries\\AS5600",
+                "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\Wire\\src",
                 "c:\\users\\dying\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0",
                 "c:\\users\\dying\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0\\xtensa-esp32-elf",
                 "c:\\users\\dying\\appdata\\local\\arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0\\xtensa-esp32-elf\\include\\c++\\8.4.0\\backward",

@@ -82,6 +82,11 @@ const int fuelLowLimit = 800;
 const int fuelHighLimit = 2000;
 
 // Shock position variables:
+int rawLeftFront = 0;
+int rawRightFront = 0;
+int rawLeftRear = 0;
+int rawRightRear = 0;
+
 int leftFront = 0;
 int rightFront = 0;
 int leftRear = 0;
@@ -236,6 +241,7 @@ void loop() {
   // Check if it's time to export data to eCVT
   if (millis() - ecvtExportTimer >= ecvtExportInterval) {
     batRead();
+    shockRead();
     
     // Export data to eCVT
     exportEcvtData();
@@ -342,10 +348,10 @@ void updateFuelAverage(int newValue) {
 
   // Function to read shock sensor values
 void shockRead() {
-  leftFront = analogRead(shockOne);
-  rightFront = analogRead(shockTwo);
-  leftRear = analogRead(shockThree);
-  rightRear = analogRead(shockFour);
+  rawLeftFront = analogRead(shockOne);
+  rawRightFront = analogRead(shockTwo);
+  rawLeftRear = analogRead(shockThree);
+  rawRightRear = analogRead(shockFour);
 
   leftFront = map(leftFront, 900, 4095, 0, 100);
   rightFront = map(rightFront, 900, 4095, 0, 100);
@@ -481,14 +487,14 @@ void processEcvtData(String data) {
 
     if (item == "Brake"){
       brakeStatus = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Launch"){
-      launchStatus = data.substring(dataIndex + 1).toInt();
+    // } else if(item == "Launch"){
+    //   launchStatus = data.substring(dataIndex + 1).toInt();
     } else if(item == "Battery"){
       ecvtBat = data.substring(dataIndex + 1).toInt();
-    } else if(item == "RPM"){
-      rpm = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Throttle"){
-      throttlePos = data.substring(dataIndex + 1).toInt();
+    // } else if(item == "RPM"){
+    //   rpm = data.substring(dataIndex + 1).toInt();
+    // } else if(item == "Throttle"){
+    //   throttlePos = data.substring(dataIndex + 1).toInt();
     } else if(item == "Helix"){
       helixPos = data.substring(dataIndex + 1).toInt();
     }
@@ -551,6 +557,10 @@ void exportPhoneData() {
 
   Phone.print("lapTimer:");  // 0-1
   Phone.print(lapReset);
+  Phone.print(",");
+
+  Phone.print("ecvtBat:");  // 0-1
+  Phone.print(ecvtBat);
   Phone.println(",");
 }
 
@@ -558,5 +568,13 @@ void exportPhoneData() {
 void exportEcvtData() {
   Ecvt.print("RPM:");
   Ecvt.print(rpm);
+  Ecvt.print(",");
+
+  Ecvt.print("Throttle:");
+  Ecvt.print(rawRightFront);
+  Ecvt.print(",");
+
+  Ecvt.print("Launch:");
+  Ecvt.print(launchStatus);
   Ecvt.println(",");
 }
