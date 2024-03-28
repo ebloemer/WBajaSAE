@@ -2,9 +2,18 @@
 
 #include <HardwareSerial.h>
 #include <AS5600.h>
+#include <BluetoothSerial.h>
 
-// Define two instances of HardwareSerial for two UART interfaces
+//error codes
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+// serial communication
 HardwareSerial Onboard(0); // UART0
+BluetoothSerial SerialBT; // Bluetooth debug
+
+// Define an instance of the AS5600 sensor
 AS5600 Encoder; // AS5600 sensor
 
 // Pin Assignments *DO NOT CHANGE* ----------------------------------------------------------------------------
@@ -46,39 +55,42 @@ const int magnets = 3;
 int rpm = 0;
 unsigned long magInterval = 0;
 
+int rpmVariance = 50;
+
 // Launch variables
-int launchPrevState;
+int launchPrevState = 0;
 unsigned long launchDebounce;
 int launchInterval;
 int launchFlag;
 int launchActive = 0; // This is (1) when the CVT needs to be open/system is in launch mode
 
 // Brake variables
-int brakePrevState;
+int brakePrevState = 0;
 unsigned long brakeDebounce;
 int brakeStatus = 0;  // This is (1) when the brake has been pressed for 1/2 second or more
 
 // Throttle variables
-int rawThrottle;
+int rawThrottle = 0;
 int throttlePos = 0;
 int throttleMin = 4095;
 int throttleMax = 0;
 
 // Helix variables
 int commandHelix;
-float rawHelix;
+float rawHelix = 0;
 int helixPos = 0;
 int helixMax = 100;
 int helixMin = 0;
 int helixOffset = 0;
 
-// Onboard communication
+// Serial communication
 String incomingOnboardData = "";
+String incomingBluetoothData = "";
 
 // Global variables
 const int debounce = 100;
 unsigned long iterationTimer = 0;
-const int iterationInterval = 5;
+const int iterationInterval = 500;
 int revDirection = 0;	// 0 = forward, 1 = reverse
 
 
@@ -88,7 +100,9 @@ void closeCVT(int fwdSpeed);
 void stopCVT();
 void stopPWM(int channel);
 void setCommandRPM();
+void setCommandHelix();
 void helixRead();
+void helixCalibrate(int duration);
 void potRead();
 void batRead();
 void updateBatAverage(int newValue);
@@ -105,6 +119,9 @@ void exportOnboardData();
 void setup() {
 	// Initialize the Onboard serial communication at a baud rate of 115200
 	Onboard.begin(115200, SERIAL_8N1, linkRx, linkTx);
+
+	// Initialize the Bluetooth serial communication
+	SerialBT.begin("BajaECVT");
 
 	// Initialize the AS5600 sensor
 	Encoder.begin();
@@ -136,30 +153,39 @@ void setup() {
 	pinMode(launchButton, INPUT_PULLUP);
 
 	// Attach an interrupt to the engine sensor pin to detect RPM changes
-	attachInterrupt(digitalPinToInterrupt(engineSensor), RPMRead, FALLING);
+	// attachInterrupt(digitalPinToInterrupt(engineSensor), RPMRead, FALLING);
 }
 
 // Loop function
 void loop() {
 	readOnboardData(); // Read onboard data
 
+	if(SerialBT.connected()) {
+		readBluetoothData(); // Read bluetooth data
+	}
+
 	//launch(); // Check launch conditions
 	brake(); // Check brake conditions
 	potRead(); // Read throttle position
 
-	// Move helix based on throttle position
-	if(launchActive == 0) {
-		setCommandRPM();
-	} else if (launchActive == 1){
-		openCVT(255);
-	}
+
 
 	// Perform tasks at a specific interval
 	if (millis() - iterationTimer >= iterationInterval) {
 		batRead();
-		helixRead();
+
+		// Move helix based on throttle position
+		if(launchActive == 0) {
+			setCommandRPM();
+		} else if (launchActive == 1){
+			openCVT(255);
+		}
 
 		exportOnboardData();
+
+		if(SerialBT.connected()) {
+			exportBluetoothData();
+		}
 
 		iterationTimer = millis();
 	}
@@ -179,8 +205,10 @@ void openCVT(int revSpeed) {
 			revDirection = 1;
 		}	
 	}	else	{
+		Onboard.print("Helix at min..,");
 		stopCVT();
 	}
+	Onboard.println("Opening..,");
 }
 
 // Function to close the CVT
@@ -198,8 +226,10 @@ void closeCVT(int fwdSpeed) {
 			revDirection = 0;
 		}
 	}	else	{
+		Onboard.print("Helix at max..,");
 		stopCVT();
 	}
+	Onboard.println("Closing..,");
 }
 
 // Function to stop the CVT
@@ -211,6 +241,7 @@ void stopCVT() {
 	digitalWrite(motorReverseB, HIGH);
 
 	revDirection = 2;
+	Onboard.println("Stopping..,");
 }
 
 // Function to stop the PWM output
@@ -224,9 +255,9 @@ void setCommandRPM(){
 
 	commandRpm = map(throttlePos, 0, 100, 1200, 3200);
 
-	if((rpm+50) < commandRpm) {
+	if((rpm+rpmVariance) < commandRpm) {
 		openCVT(150);
-	} else if((rpm-50) > commandRpm) {
+	} else if((rpm-rpmVariance) > commandRpm) {
 		closeCVT(150);
 	} else {
 		stopCVT();
@@ -234,7 +265,7 @@ void setCommandRPM(){
 
 }
 
-void setCommandHelix() {
+/* void setCommandHelix() {
 	if (helixPos < commandHelix) {
 		closeCVT(150);
 	} else if (helixPos > commandHelix) {
@@ -242,14 +273,14 @@ void setCommandHelix() {
 	} else {
 		stopCVT();
 	}
-}
+} */
 
 // Function to read the helix position
 void helixRead() {
 	// Read the helix position from the AS5600 sensor
 	rawHelix = (Encoder.readAngle() * AS5600_RAW_TO_DEGREES);
 
-	helixPos = rawHelix - helixOffset;
+	//helixPos = rawHelix - helixOffset;
 }
 
 void helixCalibrate(int duration) {
@@ -270,8 +301,6 @@ void helixCalibrate(int duration) {
 // Function to read the throttle position
 void potRead() {
 
-	//rawThrottle = analogRead(A0);
-
 	if(rawThrottle < throttleMin) {
 		throttleMin = rawThrottle;
 	} else if(rawThrottle > throttleMax) {
@@ -279,6 +308,12 @@ void potRead() {
 	}
 
 	throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+
+	if(throttlePos < 0) {
+		throttlePos = 0;
+	} else if(throttlePos > 100) {
+		throttlePos = 100;
+	}
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -401,6 +436,19 @@ void readOnboardData() {
 	}
 }
 
+void readBluetoothData() {
+	while (SerialBT.available() > 0) {
+		char c = SerialBT.read();
+
+		if (c == ',') {
+			processBluetoothData(incomingBluetoothData);
+			incomingBluetoothData = "";
+		} else if (c != '\n') {
+			incomingBluetoothData += c;
+		}
+	}
+}
+
 // Function to process onboard data received from UART
 void processOnboardData(String data) {
 	int dataIndex = data.indexOf(':');
@@ -414,7 +462,27 @@ void processOnboardData(String data) {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Launch"){
 			launchActive = data.substring(dataIndex + 1).toInt();
-		} 
+		} else if (item == "Helix"){
+			helixPos = data.substring(dataIndex + 1).toInt();
+		}
+	}
+}
+
+void processBluetoothData(String data) {
+	int dataIndex = data.indexOf(':');
+
+	if (dataIndex != -1) {
+		String item = data.substring(0, dataIndex);
+
+		if (item == "RPM") {
+			rpm = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Throttle") {
+			rawThrottle = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Launch"){
+			launchActive = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Helix"){
+			helixPos = data.substring(dataIndex + 1).toInt();
+		}
 	}
 }
 
@@ -443,4 +511,30 @@ void exportOnboardData() {
 	Onboard.print("Helix:"); // 0-1
 	Onboard.print(helixPos);
 	Onboard.println(",");
+}
+
+void exportBluetoothData(){
+	SerialBT.print("Battery:"); // 0-1
+	SerialBT.print(batPercent);
+	SerialBT.print(",");
+
+	SerialBT.print("RPM:"); // 0-1
+	SerialBT.print(rpm);
+	SerialBT.print(",");
+
+	SerialBT.print("Launch:"); // 0-1
+	SerialBT.print(launchActive);
+	SerialBT.print(",");
+
+	SerialBT.print("Brake:"); // 0-1
+	SerialBT.print(brakeStatus);
+	SerialBT.print(",");
+
+	SerialBT.print("Throttle:"); // 0-1
+	SerialBT.print(throttlePos);
+	SerialBT.print(",");
+
+	SerialBT.print("Helix:"); // 0-1
+	SerialBT.print(helixPos);
+	SerialBT.println(",");
 }

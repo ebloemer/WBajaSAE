@@ -21,6 +21,11 @@
   },
   {
     "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtBruteForce.ino.cpp",
+    "Include": "BluetoothSerial.h",
+    "Includepath": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src"
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtBruteForce.ino.cpp",
     "Include": "",
     "Includepath": null
   },
@@ -31,6 +36,26 @@
   },
   {
     "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\Wire\\src\\Wire.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src\\BTAddress.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src\\BTAdvertisedDeviceSet.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src\\BTScanResultsSet.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src\\BluetoothSerial.cpp",
     "Include": "",
     "Includepath": null
   }

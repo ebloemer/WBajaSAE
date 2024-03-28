@@ -1,3 +1,5 @@
+#include <AS5600.h>
+
 
 /*
     Name:       onboardCode.ino
@@ -374,11 +376,13 @@ void muteButtonCheck() {
     }
 
     if ((millis() - muteInterval) <= 1000 && buttonState == HIGH && muteFlag == 1) {
-      // Activate panic if longer than 2 seconds
       muteStatusUpdate();
       muteFlag = 0;
-    } else if ((millis() - muteInterval) > 1000 && buttonState == HIGH && muteFlag == 1) {
+    } else if ((millis() - muteInterval) > 1000 && buttonState == LOW && muteFlag == 1 && launchStatus == 0) {
+      launchStatus = 1;
+    } else if (buttonState == HIGH && muteFlag == 1) {
       muteFlag = 0;
+      launchStatus = 0;
     }
   }
 
@@ -559,8 +563,12 @@ void exportPhoneData() {
   Phone.print(lapReset);
   Phone.print(",");
 
-  Phone.print("ecvtBat:");  // 0-1
+  Phone.print("eCVT:");  // 0-1
   Phone.print(ecvtBat);
+  Phone.print(",");
+
+  Phone.print("Launch:");  // 0-1
+  Phone.print(launchStatus);
   Phone.println(",");
 }
 

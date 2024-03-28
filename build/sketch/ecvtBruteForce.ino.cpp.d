@@ -135,4 +135,12 @@ C:\Users\dying\OneDrive\ -\ The\ University\ of\ Western\ Ontario\Western\ Baja\
  C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\cores\esp32/HardwareSerial.h \
  C:\Users\dying\Documents\Arduino\libraries\AS5600/AS5600.h \
  C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\libraries\Wire\src/Wire.h \
- C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\cores\esp32/esp32-hal.h
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\cores\esp32/esp32-hal.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\libraries\BluetoothSerial\src/BluetoothSerial.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_gap_bt_api.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_bt_defs.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14/tools/sdk/esp32/include/bt/host/bluedroid/api/include/api/esp_spp_api.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\libraries\BluetoothSerial\src/BTScan.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\cores\esp32/Print.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\libraries\BluetoothSerial\src/BTAddress.h \
+ C:\Users\dying\AppData\Local\Arduino15\packages\esp32\hardware\esp32\2.0.14\libraries\BluetoothSerial\src/BTAdvertisedDevice.h
