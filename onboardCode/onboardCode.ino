@@ -55,6 +55,9 @@ HardwareSerial Ecvt(0);   // UART0
 int rawBattery;
 int batPercent;
 
+const int batLowLimit = 2150;
+const int batHighLimit = 3180;
+
 // Engine RPM variables:
 unsigned long pulseTime;
 unsigned long prevPulseTime;
@@ -70,13 +73,13 @@ int speed;
 // Fuel variables:
 unsigned long fuelStart;
 unsigned long fuelEnd;
-unsigned long fuelTime;
+int fuelTime;
 int rawFuel = 0;
 int fuelFlag = 0;
 int fuel = 0;
 
-const int fuelLowLimit = 620;
-const int fuelHighLimit = 2500;
+const int fuelLowLimit = 800;
+const int fuelHighLimit = 2000;
 
 // Shock position variables:
 int leftFront = 0;
@@ -113,7 +116,7 @@ int ecvtBat = 0;
 int throttlePos = 0;
 int helixPos = 0;
 unsigned long ecvtExportTimer = 0;
-const int ecvtExportInterval = 5;
+const int ecvtExportInterval = 8;
 
 // Phone communication
 String incomingPhoneData = "";
@@ -123,18 +126,22 @@ const int phoneExportInterval = 16;
 
 // Global variables
 int lapResetCount = 0;
-const int numSamples = 200;  // Number of samples to consider for moving average
-int fuelLogger[numSamples];  // Array to store PWM samples
-int sampleIndex = 0;         // Index to keep track of the current sample
+const int batSamples = 1000;        // Number of samples to consider for moving average
+const int fuelSamples = 1000;       // Number of samples to consider for moving average
+int fuelLogger[fuelSamples];  // Array to store PWM samples
+int batLogger[batSamples];   // Array to store PWM samples
+int batIndex = 0;            // Index to keep track of the current sample
+int fuelIndex = 0;         // Index to keep track of the current sample
 const int debounce = 20;
 
 // Function prototypes
 void reverseCheck();
 void batRead();
+void updateBatAverage(int newValue);
 void RPMRead();
 void rpmCalculate();
-void updateMovingAverage(int newValue);
 void fuelRead();
+void updateFuelAverage(int newValue);
 void shockRead();
 void muteButtonCheck();
 void muteStatusUpdate();
@@ -153,9 +160,15 @@ void setup() {
   // Initialize serial communication with phone and eCVT
   Phone.begin(115200, SERIAL_8N1, phoneRx, phoneTx);
   Ecvt.begin(115200, SERIAL_8N1, linkRx, linkTx);
-  // Initialize PWM samples array
-  for (int i = 0; i < numSamples; i++) {
-    fuelLogger[i] = 0;
+  
+  // Initialize fuel samples array
+  for (int i = 0; i < fuelSamples; i++) {
+    fuelLogger[i] = fuelLowLimit;
+  }
+  
+  // Initialize battery samples array
+  for (int i = 0; i < batSamples; i++) {
+    batLogger[i] = batLowLimit;
   }
 
   // Initialize regulator pins
@@ -205,13 +218,13 @@ void loop() {
   readPhoneData();
   
   // Check lap button and mute button
+  reverseCheck();
   lapButtonCheck();
   muteButtonCheck();
 
   // Check if it's time to export data to phone
   if (millis() - phoneExportTimer >= phoneExportInterval) {
     // Run non-time critical functions
-    batRead();
     shockRead();
 
     // Export data to phone
@@ -222,6 +235,8 @@ void loop() {
 
   // Check if it's time to export data to eCVT
   if (millis() - ecvtExportTimer >= ecvtExportInterval) {
+    batRead();
+    
     // Export data to eCVT
     exportEcvtData();
 
@@ -240,10 +255,27 @@ void reverseCheck() {
 
 // Function to read battery voltage and calculate battery percentage
 void batRead() {
-  rawBattery = analogRead(batterySensor);
+
+  int rawBattery = analogRead(batterySensor);
 
   // Calibrate the reading
-  batPercent = map(rawBattery, 2150, 3180, 0, 99);
+  if(rawBattery > batLowLimit){
+    updateBatAverage(rawBattery);
+  }
+  
+}
+
+// Function to update moving average of PWM samples
+void updateBatAverage(int newValue) {
+  batLogger[batIndex] = newValue;
+  batIndex = (batIndex + 1) % batSamples;
+  long sum = 0;
+
+  for (int i = 0; i < batSamples; i++) {
+    sum += batLogger[i];
+  }
+
+  batPercent = map((sum / batSamples), batLowLimit, batHighLimit, 0, 99);
 }
 
 // Function to calculate RPM from pulse time
@@ -275,18 +307,6 @@ void rpmCalculate() {
   rpm = magFreq / magnets;
 }
 
-// Function to update moving average of PWM samples
-void updateMovingAverage(int newValue) {
-  fuelLogger[sampleIndex] = newValue;
-  sampleIndex = (sampleIndex + 1) % numSamples;
-  int sum = 0;
-
-  for (int i = 0; i < numSamples; i++) {
-    sum += fuelLogger[i];
-  }
-  fuel = sum / numSamples;
-}
-
 // Function to read fuel sensor and update fuel level
 void fuelRead() {
   if (digitalRead(fuelSensor) == HIGH && fuelFlag == 0) {
@@ -299,10 +319,25 @@ void fuelRead() {
 
   fuelTime = fuelEnd - fuelStart;
 
-  rawFuel = map(fuelTime, fuelLowLimit, fuelHighLimit, 0, 100);
-  if (rawFuel > 0) {
-    updateMovingAverage(rawFuel);
+  if (fuelFlag == 0 && fuelTime > fuelLowLimit) {
+    updateFuelAverage(fuelTime);
   }
+}
+
+// Function to update moving average of PWM samples
+void updateFuelAverage(int newValue) {
+  fuelLogger[fuelIndex] = newValue;
+  fuelIndex = (fuelIndex + 1) % fuelSamples;
+
+  long sum = 0;
+
+  for (int i = 0; i < fuelSamples; i++) {
+    sum += fuelLogger[i];
+  }
+
+  rawFuel = sum / fuelSamples;
+
+  fuel = map(rawFuel, fuelLowLimit, fuelHighLimit, 0, 99);
 }
 
   // Function to read shock sensor values
@@ -490,21 +525,21 @@ void exportPhoneData() {
   Phone.print(fuel);
   Phone.print(",");
 
-  Phone.print("LF:");       // 0-100
-  Phone.print(leftFront);
-  Phone.print(",");
+  // Phone.print("LF:");       // 0-100
+  // Phone.print(leftFront);
+  // Phone.print(",");
 
   Phone.print("RF:");  // 0-100
   Phone.print(rightFront);
   Phone.print(",");
 
-  Phone.print("LB:");       // 0-100
-  Phone.print(leftRear);
-  Phone.print(",");
+  // Phone.print("LB:");       // 0-100
+  // Phone.print(leftRear);
+  // Phone.print(",");
 
-  Phone.print("RB:");       // 0-100
-  Phone.print(rightRear);
-  Phone.print(",");
+  // Phone.print("RB:");       // 0-100
+  // Phone.print(rightRear);
+  // Phone.print(",");
 
   Phone.print("panic:");  // 0-1
   Phone.print(panicStatus);
@@ -516,12 +551,12 @@ void exportPhoneData() {
 
   Phone.print("lapTimer:");  // 0-1
   Phone.print(lapReset);
-  Phone.print(",");
+  Phone.println(",");
 }
 
   // Function to export data to eCVT
 void exportEcvtData() {
   Ecvt.print("RPM:");
   Ecvt.print(rpm);
-  Ecvt.print(",");
+  Ecvt.println(",");
 }
