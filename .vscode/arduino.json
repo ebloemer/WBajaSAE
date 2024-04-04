@@ -1,8 +1,8 @@
 {
-    "configuration": "FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=all",
+    "configuration": "FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=none",
     "board": "esp32:esp32:esp32doit-devkit-v1",
     "programmer": "esptool",
-    "sketch": "ecvtBruteForce\\ecvtBruteForce.ino",
-    "output": "./build",
-    "port": "COM7"
+    "port": "COM7",
+    "sketch": "ecvtCode\\ecvtCode.ino",
+    "output": "./build"
 }

@@ -123,7 +123,7 @@ int ecvtBat = 0;
 int throttlePos = 0;
 int helixPos = 0;
 unsigned long ecvtExportTimer = 0;
-const int ecvtExportInterval = 8;
+const int ecvtExportInterval = 5;
 
 // Phone communication
 String incomingPhoneData = "";
@@ -398,6 +398,13 @@ void muteStatusUpdate() {
   }
 }
 
+void batteryCheck() {
+  if (batPercent < 10) {
+    panicStatusUpdate();
+    panicActive = 1;
+  }
+}
+
   // Function to reset lap timer
 void lapTimeReset() {
   if (lapReset == 0) {
@@ -574,12 +581,16 @@ void exportPhoneData() {
 
   // Function to export data to eCVT
 void exportEcvtData() {
-  Ecvt.print("RPM:");
-  Ecvt.print(rpm);
+  Ecvt.print("Battery:");
+  Ecvt.print(batPercent);
   Ecvt.print(",");
-
+  
   Ecvt.print("Throttle:");
   Ecvt.print(rawRightFront);
+  Ecvt.print(",");
+
+  Ecvt.print("RPM:");
+  Ecvt.print(rpm);
   Ecvt.print(",");
 
   Ecvt.print("Launch:");
