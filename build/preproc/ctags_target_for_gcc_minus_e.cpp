@@ -72,6 +72,8 @@ int helixMin = 0;
 float helixOffset = 166;
 float rawHelixDegrees = 0;
 
+int closeSpeed = 200;
+int openSpeed = 200;
 int returnSpeed = 150;
 
 // Serial communication
@@ -155,35 +157,36 @@ void loop() {
 
  brake(); // Check brake conditions
 
+ //HERES WHERE THE SHIT HAPPENS BABY --------------------------------------------------------------------------------------------
+ if(launchActive == 0) {
+  setCommandRPM();
+ } else if (launchActive == 1){
+  setCommandHelix(helixMin);
 
+  Onboard.println("Launch Active..,");
+  if(SerialBT.connected()) {
+   SerialBT.println("Launch Active..,");
+  }
+ }
+ //HERES WHERE THE SHIT ENDS BABY ------------------------------------------------------------------------------------------------
 
- // Perform tasks at a specific interval-
- if (millis() - iterationTimer >= iterationInterval) {
-  batRead(); // Read battery voltage
-
-/*     digitalWrite(motorForwardA, forwardA);
+ /*     digitalWrite(motorForwardA, forwardA);
 
     digitalWrite(motorForwardB, forwardB);
 
     digitalWrite(motorReverseA, reverseA);
 
     digitalWrite(motorReverseB, reverseB); */
-# 177 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
-  if(launchActive == 0) {
-   setCommandRPM();
-  } else if (launchActive == 1){
-   if(SerialBT.connected()) {
-    SerialBT.println("Launch Active..,");
-   }
-  }
-
-
-
-  exportOnboardData(); // Export onboard data
-
+# 186 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
   if(SerialBT.connected()) {
    exportBluetoothData();
   }
+
+ // Perform tasks at a specific interval-
+ if (millis() - iterationTimer >= iterationInterval) {
+  batRead(); // Read battery voltage
+
+  exportOnboardData(); // Export onboard data
 
   iterationTimer = millis();
  }
@@ -338,9 +341,9 @@ void setCommandRPM() {
  commandRpm = map(throttlePos, 0, 100, 0, 400);
 
  if((rpm+rpmVariance) < commandRpm) {
-  openCVT(200);
+  openCVT(openSpeed);
  } else if((rpm-rpmVariance) > commandRpm) {
-  closeCVT(200);
+  closeCVT(closeSpeed);
  } else if (!checkLimits()) {
   stopCVT();
 
@@ -354,11 +357,16 @@ void setCommandRPM() {
 
 void setCommandHelix(int commandHelix) {
  if (helixPos < commandHelix-10) {
-  closeCVT(150);
- } else if (helixPos > commandHelix+5) {
-  openCVT(150);
- } else {
+  openCVT(openSpeed);
+ } else if (helixPos > commandHelix+10) {
+  closeCVT(closeSpeed);
+ } else if (!checkLimits()) {
   stopCVT();
+
+  if(SerialBT.connected()) {
+   SerialBT.println("Helix at setpoint..,");
+  }
+  Onboard.println("Helix at setpoint..,");
  }
 }
 
@@ -368,40 +376,13 @@ void helixRead() {
  rawHelix = map(Encoder.readAngle(),4095,0,0,4095);
 
  // Convert the raw helix position to degrees
- //helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
-}
-
-void helixCalibrate(int duration) {
-
- int timeElapsed = 0;
-
- digitalWrite(2 /* reverse - mosfet*/, 0x1); // motorReverseB ON
- ledcWrite(1, 100); // motorReverseA ON
-
- while(millis() - timeElapsed < duration) {
-  helixOffset = (Encoder.readAngle() * AS5600_RAW_TO_DEGREES);
- }
-
- stopCVT();
-
+ helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
 }
 
 // Function to read the throttle position
 void potRead() {
 
- /* if(rawThrottle > throttleMin && rawThrottle < 2950) {
-
-		throttleMin = rawThrottle;
-
-	} else if(rawThrottle < throttleMax) {
-
-		throttleMax = rawThrottle;
-
-	} */
-# 403 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
- //throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
-
- throttlePos = map(rawThrottle, 0, 100, 0, 100);
+ throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
 
  if(throttlePos < 5) {
   throttlePos = 0;
@@ -514,6 +495,8 @@ void processOnboardData(String data) {
    launchActive = data.substring(dataIndex + 1).toInt();
   } else if (item == "Helix"){
    helixPos = data.substring(dataIndex + 1).toInt();
+  } else if (item == "Return"){
+   returnSpeed = data.substring(dataIndex + 1).toInt();
   }
  }
 }
