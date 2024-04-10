@@ -54,7 +54,7 @@ int batIndex = 0;
 
 // Engine RPM variables:
 int commandRpm;
-int rpm = 0;
+int actualRpm = 0;
 
 int rpmVariance = 50;
 
@@ -84,14 +84,28 @@ int closeSpeed = 200;
 int openSpeed = 200;
 int returnSpeed = 150;
 
+// PID shit
+// Define PID parameters
+double Kp = 0.1;  // Proportional gain
+double Ki = 0.001;  // Integral gain
+double Kd = 0;  // Derivative gain
+
+double output = 0;  // Output control signal
+
+double previousError = 0;
+double integral = 0;
+int pidInterval = 100;
+int pidTimer;
+
 // Serial communication
 String incomingOnboardData = "";
 String incomingBluetoothData = "";
 
 // Global variables
 const int debounce = 100;
-unsigned long iterationTimer = 0;
-const int iterationInterval = 50;
+int elapsedTime;
+unsigned long updateTimer = 0;
+const int updateInterval = 50;
 int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
 
 
@@ -99,14 +113,14 @@ int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = 
 void openCVT(int revSpeed);
 void closeCVT(int fwdSpeed);
 void stopCVT();
-void pastMin(int returnSpeed);
-void pastMax(int returnSpeed);
-int checkLimits();
+void getCommandRPM();
 void setCommandRPM();
-void setCommandHelix();
+void pastMin(int speed);
+void pastMax(int speed);
+int checkLimits();
+void setCommandHelix(int commandHelix);
 void helixRead();
 void helixCalibrate(int duration);
-void potRead();
 void batRead();
 void updateBatAverage(int newValue);
 void brake();
@@ -165,18 +179,6 @@ void loop() {
 
 	brake(); // Check brake conditions
 
-	//HERES WHERE THE SHIT HAPPENS BABY --------------------------------------------------------------------------------------------
-	if(launchActive == 0) {
-		setCommandRPM();
-	} else if (launchActive == 1){
-		setCommandHelix(helixMin);
-
-		Onboard.println("Launch Active..,");
-		if(SerialBT.connected()) {
-			SerialBT.println("Launch Active..,");
-		}
-	}
-	//HERES WHERE THE SHIT ENDS BABY ------------------------------------------------------------------------------------------------
 
 	/*     digitalWrite(motorForwardA, forwardA);
     digitalWrite(motorForwardB, forwardB);
@@ -189,80 +191,71 @@ void loop() {
 
 	exportOnboardData(); // Export onboard data
 
+  elapsedTime = millis() - pidTimer;
+
+  	// Perform tasks at a specific interval
+	if (elapsedTime >= pidInterval) {
+      if(launchActive == 0) {
+      setCommandRPM();
+    } else if (launchActive == 1){
+			setCommandHelix(helixMin);
+
+      Onboard.println("Launch Active..,");
+      if(SerialBT.connected()) {
+        SerialBT.println("Launch Active..,");
+      }
+    }
+	}
+
 	// Perform tasks at a specific interval
-	if (millis() - iterationTimer >= iterationInterval) {
+	if (millis() - updateTimer >= updateInterval) {
 		batRead(); // Read battery voltage
 
 		//exportOnboardData(); // Export onboard data
 
-		iterationTimer = millis();
+		updateTimer = millis();
 	}
 }
 
 // Function to open the CVT
 void openCVT(int revSpeed) {
-	helixRead();
-	
-	if(helixPos > (helixMin + 5) && helixPos < (helixMax+100)) {	// Open the CVT if the helix position is within the limits
-		if(motorState != 1) {
-			stopCVT();
-    	digitalWrite(motorReverseA, HIGH); // motorReverseA ON
-			ledcAttachPin(motorReverseB, 1);
-			ledcWrite(1, revSpeed); // motorReverseA ON
-			motorState = 1;
-		}
+  if(motorState != 1) {
+    stopCVT();
+    digitalWrite(motorReverseA, HIGH); // motorReverseA ON
+    ledcAttachPin(motorReverseB, 1);
+    ledcWrite(1, revSpeed); // motorReverseA ON
+    motorState = 1;
+  }
 
-		if(ledcRead(1) != revSpeed) {
-			ledcWrite(1, revSpeed);
-		}
+  if(ledcRead(1) != revSpeed) {
+    ledcWrite(1, revSpeed);
+  }
 
-		if(SerialBT.connected()) {
-			SerialBT.println("Opening..,");
-		}
-		Onboard.println("Opening..,");
-	}	
-	
-	else if(!checkLimits()) { // Open the CVT if the helix position is above the maximum limit
-		stopCVT();
-		Onboard.println("Helix at min..,");
-		if(SerialBT.connected()) {
-			SerialBT.println("Helix at min..,");
-		}
-	}
+  Onboard.println("Opening..,");
+  if(SerialBT.connected()) {
+    SerialBT.println("Opening..,");
+  }
 }
 
 // Function to close the CVT
 void closeCVT(int fwdSpeed) {
-	helixRead();
-	
-	if(helixPos < (helixMax-5) && helixPos > (helixMin-100)){ // Close the CVT if the helix position is within the limits
 
-		if(motorState != 0) {
-			stopCVT();
-      digitalWrite(motorForwardA, HIGH);
-			ledcAttachPin(motorForwardB, 0);
-			ledcWrite(0, fwdSpeed); // motorForwardA ON
-			motorState = 0;
-		}
+  if(motorState != 0) {
+    stopCVT();
+    digitalWrite(motorForwardA, HIGH);
+    ledcAttachPin(motorForwardB, 0);
+    ledcWrite(0, fwdSpeed); // motorForwardA ON
+    motorState = 0;
+  }
 
-		if(ledcRead(0) != fwdSpeed) {
-			ledcWrite(0, fwdSpeed);
-		}
+  if(ledcRead(0) != fwdSpeed) {
+    ledcWrite(0, fwdSpeed);
+  }
 
-		Onboard.println("Closing..,");
-		if(SerialBT.connected()) {
-			SerialBT.println("Closing..,");
-		}
-	}	
-	
-	else if(!checkLimits()) { // Close the CVT if the helix position is below the minimum limit
-		stopCVT();
-
-		Onboard.println("Helix at max..,");
-		if(SerialBT.connected()) {
-			SerialBT.println("Helix at max..,");
-		}
-	}
+  Onboard.println("Closing..,");
+  if(SerialBT.connected()) {
+    SerialBT.println("Closing..,");
+  }
 }
 
 // Function to stop the CVT
@@ -286,6 +279,62 @@ void stopCVT() {
 	if(SerialBT.connected()) {
 		SerialBT.print("Stopping..,");
 	}
+}
+
+// Function to set the command RPM
+void getCommandRPM() {
+	//throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+	throttlePos = map(rawThrottle, 0, 100, 0, 100);
+
+	throttlePos = constrain(throttlePos, 0, 100);
+
+	//commandRpm = map(throttlePos, 0, 100, 1500, 2500);
+	commandRpm = map(throttlePos, 0, 100, 0, 1000);
+}
+
+void setCommandRPM(){
+
+  // Read the helix position
+  helixRead();
+
+  // Set the command RPM based on the throttle position
+  getCommandRPM();
+
+
+  // Calculate error
+  double error = commandRpm - actualRpm;
+
+  // Calculate integral term (approximate integral using trapezoidal rule)
+  integral += (error + previousError) * elapsedTime / 2000.0;  // Convert milliseconds to seconds
+
+  // Calculate derivative term
+  double derivative = (error - previousError) / (elapsedTime / 1000.0);  // Convert milliseconds to seconds
+
+  // Compute PID output
+  output = Kp * error + Ki * integral + Kd * derivative;
+
+  // Update previous values for next iteration
+  previousError = error;
+
+  // Apply output to the system (e.g., adjust motor speed)
+  Serial.println(output);
+
+  // Ensure output is within acceptable bounds (e.g., for PWM control)
+  output = constrain(output, -255, 255);
+
+	int limitCheck = checkLimits();
+
+  // Execute PID control signal
+  if (output > 0 && !limitCheck) {
+    // Open CVT
+    openCVT(output); // Adjust PWM duty cycle for motor control
+  } else if (output < 0 && !limitCheck) {
+    // Close CVT
+    closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+  } else if (!limitCheck){
+    // Stop CVT
+    stopCVT();
+  }
 }
 
 void pastMin(int speed) {
@@ -340,28 +389,6 @@ int checkLimits() {
 	}
 }
 
-// Function to set the command RPM
-void setCommandRPM() {
-	potRead();
-
-	//commandRpm = map(throttlePos, 0, 100, 1500, 2500);
-	commandRpm = map(throttlePos, 0, 100, 0, 1000);
-
-	if((rpm+rpmVariance) < commandRpm) {
-		openCVT(openSpeed);
-	} else if((rpm-rpmVariance) > commandRpm) {
-		closeCVT(closeSpeed);
-	} else if (!checkLimits()) {
-		stopCVT();
-
-		if(SerialBT.connected()) {
-			SerialBT.println("RPM at setpoint..,");
-		}
-		Onboard.println("RPM at setpoint..,");
-	}
-
-}
-
 void setCommandHelix(int commandHelix) {
 	if (helixPos < commandHelix-10) {
 		openCVT(openSpeed);
@@ -384,15 +411,6 @@ void helixRead() {
 
 	// Convert the raw helix position to degrees
 	//helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
-}
-
-// Function to read the throttle position
-void potRead() {
-
-	//throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
-	throttlePos = map(rawThrottle, 0, 100, 0, 100);
-
-	throttlePos = constrain(throttlePos, 0, 100);
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -490,7 +508,7 @@ void processOnboardData(String data) {
 		} else if (item == "RevB"){
 			reverseB = data.substring(dataIndex + 1).toInt();
 		} else if (item == "RPM") {
-			rpm = data.substring(dataIndex + 1).toInt();
+			actualRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Launch"){
@@ -526,7 +544,7 @@ void processBluetoothData(String data) {
 		} else if (item == "Max"){
 			helixMax = data.substring(dataIndex + 1).toInt();
 		} else if (item == "RPM") {
-			rpm = data.substring(dataIndex + 1).toInt();
+			actualRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Launch"){
@@ -565,7 +583,7 @@ void exportOnboardData() {
 	Onboard.print(",");
 
 	Onboard.print("RPM:");
-	Onboard.print(rpm);
+	Onboard.print(actualRpm);
 	Onboard.print(",");
 
 	Onboard.print("Throttle:"); // 0-1
@@ -615,7 +633,7 @@ void exportBluetoothData(){
 	SerialBT.print(",");
 
 	SerialBT.print("RPM:"); // 0-1
-	SerialBT.print(rpm);
+	SerialBT.print(actualRpm);
 	SerialBT.print(",");
 
 	SerialBT.print("Commanded:");

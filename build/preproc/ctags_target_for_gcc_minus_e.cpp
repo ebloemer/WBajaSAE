@@ -151,10 +151,12 @@ void setup() {
 // Loop function
 void loop() {
  readOnboardData(); // Read onboard data
- if(SerialBT.connected()) {
-  readBluetoothData(); // Read bluetooth data
- }
+/* 	if(SerialBT.connected()) {
 
+		readBluetoothData(); // Read bluetooth data
+
+	} */
+# 166 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
  brake(); // Check brake conditions
 
  //HERES WHERE THE SHIT HAPPENS BABY --------------------------------------------------------------------------------------------
@@ -178,18 +180,30 @@ void loop() {
 
     digitalWrite(motorReverseB, reverseB); */
 # 186 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
-  if(SerialBT.connected()) {
-   exportBluetoothData();
-  }
+/* 	if(SerialBT.connected()) {
 
- // Perform tasks at a specific interval-
- if (millis() - iterationTimer >= iterationInterval) {
-  batRead(); // Read battery voltage
+		exportBluetoothData();
 
-  exportOnboardData(); // Export onboard data
+	} */
+# 190 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+ exportOnboardData(); // Export onboard data
 
-  iterationTimer = millis();
- }
+/* 	// Perform tasks at a specific interval
+
+	if (millis() - iterationTimer >= iterationInterval) {
+
+		batRead(); // Read battery voltage
+
+
+
+		//exportOnboardData(); // Export onboard data
+
+
+
+		iterationTimer = millis();
+
+	} */
+# 200 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
 }
 
 // Function to open the CVT
@@ -338,7 +352,7 @@ void setCommandRPM() {
  potRead();
 
  //commandRpm = map(throttlePos, 0, 100, 1500, 2500);
- commandRpm = map(throttlePos, 0, 100, 0, 400);
+ commandRpm = map(throttlePos, 0, 100, 0, 1000);
 
  if((rpm+rpmVariance) < commandRpm) {
   openCVT(openSpeed);
@@ -376,19 +390,16 @@ void helixRead() {
  rawHelix = map(Encoder.readAngle(),4095,0,0,4095);
 
  // Convert the raw helix position to degrees
- helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
+ //helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
 }
 
 // Function to read the throttle position
 void potRead() {
 
- throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+ //throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+ throttlePos = map(rawThrottle, 0, 100, 0, 100);
 
- if(throttlePos < 5) {
-  throttlePos = 0;
- } else if(throttlePos > 100) {
-  throttlePos = 100;
- }
+ throttlePos = ((throttlePos)<(0)?(0):((throttlePos)>(100)?(100):(throttlePos)));
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -485,8 +496,6 @@ void processOnboardData(String data) {
    reverseA = data.substring(dataIndex + 1).toInt();
   } else if (item == "RevB"){
    reverseB = data.substring(dataIndex + 1).toInt();
-  } else if (item == "Min"){
-   helixMin = data.substring(dataIndex + 1).toInt();
   } else if (item == "RPM") {
    rpm = data.substring(dataIndex + 1).toInt();
   } else if (item == "Throttle") {
@@ -497,6 +506,10 @@ void processOnboardData(String data) {
    helixPos = data.substring(dataIndex + 1).toInt();
   } else if (item == "Return"){
    returnSpeed = data.substring(dataIndex + 1).toInt();
+  } else if (item == "Open"){
+   openSpeed = data.substring(dataIndex + 1).toInt();
+  } else if (item == "Close"){
+   closeSpeed = data.substring(dataIndex + 1).toInt();
   }
  }
 }
@@ -574,8 +587,22 @@ void exportOnboardData() {
  Onboard.print(helixPos);
  Onboard.print(",");
 
- Onboard.print("Raw Helix:"); // 0-1
- Onboard.print(rawHelix);
+/* 	Onboard.print("Raw Helix:"); // 0-1
+
+	Onboard.print(rawHelix);
+
+	Onboard.print(","); */
+# 587 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+ Onboard.print("Return Speed:"); // 0-1
+ Onboard.print(returnSpeed);
+ Onboard.print(",");
+
+ Onboard.print("Open Speed:"); // 0-1
+ Onboard.print(openSpeed);
+ Onboard.print(",");
+
+ Onboard.print("Close Speed:"); // 0-1
+ Onboard.print(closeSpeed);
  Onboard.println(",");
 }
 
