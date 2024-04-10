@@ -10,22 +10,27 @@
     "Includepath": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\variants\\doitESP32devkitV1"
   },
   {
-    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtCode.ino.cpp",
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtAutotune.ino.cpp",
     "Include": "AS5600.h",
     "Includepath": "C:\\Users\\dying\\Documents\\Arduino\\libraries\\AS5600"
   },
   {
-    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtCode.ino.cpp",
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtAutotune.ino.cpp",
     "Include": "Wire.h",
     "Includepath": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\Wire\\src"
   },
   {
-    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtCode.ino.cpp",
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtAutotune.ino.cpp",
     "Include": "BluetoothSerial.h",
     "Includepath": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src"
   },
   {
-    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtCode.ino.cpp",
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtAutotune.ino.cpp",
+    "Include": "QuickPID.h",
+    "Includepath": "C:\\Users\\dying\\Documents\\Arduino\\libraries\\QuickPID"
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\ecvtAutotune.ino.cpp",
     "Include": "",
     "Includepath": null
   },
@@ -56,6 +61,16 @@
   },
   {
     "Sourcefile": "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\libraries\\BluetoothSerial\\src\\BluetoothSerial.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\Documents\\Arduino\\libraries\\QuickPID\\QuickPID.cpp",
+    "Include": "",
+    "Includepath": null
+  },
+  {
+    "Sourcefile": "C:\\Users\\dying\\Documents\\Arduino\\libraries\\QuickPID\\analogWrite.cpp",
     "Include": "",
     "Includepath": null
   }

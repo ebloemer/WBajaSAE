@@ -23,7 +23,7 @@ AS5600 Encoder; // AS5600 sensor
 #define motorForwardA 32  // forward + mosfet
 #define motorForwardB 26  // forward - mosfet
 #define motorReverseA 25  // reverse + mosfet
-#define motorReverseB 2  // reverse - mosfet
+#define motorReverseB 33  // reverse - mosfet
 
 int forwardA = 0;
 int forwardB = 0;
@@ -344,8 +344,8 @@ int checkLimits() {
 void setCommandRPM() {
 	potRead();
 
-	//commandRpm = map(throttlePos, 0, 100, 1500, 2500);
-	commandRpm = map(throttlePos, 0, 100, 0, 1000);
+	commandRpm = map(throttlePos, 0, 100, 1500, 3000);
+	//commandRpm = map(throttlePos, 0, 100, 0, 1000);
 
 	if((rpm+rpmVariance) < commandRpm) {
 		openCVT(openSpeed);
@@ -383,14 +383,14 @@ void helixRead() {
 	rawHelix = map(Encoder.readAngle(),4095,0,0,4095);
 
 	// Convert the raw helix position to degrees
-	//helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
+	helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
 }
 
 // Function to read the throttle position
 void potRead() {
 
-	//throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
-	throttlePos = map(rawThrottle, 0, 100, 0, 100);
+	throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+	//throttlePos = map(rawThrottle, 0, 100, 0, 100);
 
 	throttlePos = constrain(throttlePos, 0, 100);
 }

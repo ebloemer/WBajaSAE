@@ -1,10 +1,10 @@
-# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
 // This file contains the code for the ecvtCode project.
 
-# 4 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino" 2
-# 5 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino" 2
-# 6 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino" 2
-# 7 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino" 2
+# 4 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino" 2
+# 5 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino" 2
+# 6 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino" 2
+# 7 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino" 2
 
 //error codes
 
@@ -32,7 +32,7 @@ int reverseA = 0;
 int reverseB = 0;
 
 // Low Power Inputs
-# 44 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+# 44 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
 // Variable declarations ----------------------------------------------------------------
 
 // Battery variables:
@@ -46,7 +46,7 @@ int batIndex = 0;
 
 // Engine RPM variables:
 int commandRpm;
-int rpm = 0;
+int actualRpm = 0;
 
 int rpmVariance = 50;
 
@@ -72,33 +72,89 @@ int helixMin = 0;
 float helixOffset = 166;
 float rawHelixDegrees = 0;
 
-int closeSpeed = 200;
-int openSpeed = 200;
-int returnSpeed = 150;
+int closeSpeed = 150;
+int openSpeed = 150;
+int returnSpeed = 100;
 
+int limitCheck = 1;
+
+/* // PID shit
+
+// Define PID parameters
+
+double Kp = 0.1;  // Proportional gain
+
+double Ki = 0.1;  // Integral gain
+
+double Kd = 0.01;  	// Derivative gain
+
+double Ti = 100;	// Integral time constant
+
+double Td = 1000;	// Derivative time constant
+
+
+
+double output = 0;  // Output control signal
+
+
+
+double previousError = 0;
+
+double integral = 0;
+
+int pidInterval = 1;
+
+int pidTimer; */
+# 104 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
 // Serial communication
 String incomingOnboardData = "";
 String incomingBluetoothData = "";
 
 // Global variables
 const int debounce = 100;
-unsigned long iterationTimer = 0;
-const int iterationInterval = 50;
+int elapsedTime;
+unsigned long updateTimer = 0;
+const int updateInterval = 50;
 int motorState = 2; // 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
+
+// Autotune Stuff ------------------------------------------------------
+# 117 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino" 2
+
+const uint32_t sampleTimeUs = 10000; // 10ms
+const byte inputPin = 0;
+const byte outputPin = 3;
+const int outputMax = 255;
+const int outputMin = -255;
+
+bool printOrPlotter = 0; // on(1) monitor, off(0) plotter
+float POn = 1.0; // proportional on Error to Measurement ratio (0.0-1.0), default = 1.0
+float DOn = 0.0; // derivative on Error to Measurement ratio (0.0-1.0), default = 0.0
+
+byte outputStep = 5;
+byte hysteresis = 1;
+int setpoint = 341; // 1/3 of range for symetrical waveform
+int output = 85; // 1/3 of range for symetrical waveform
+
+float Input, Output, Setpoint;
+float Kp = 0, Ki = 0, Kd = 0;
+bool pidLoop = false;
+
+QuickPID _myPID = QuickPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, POn, DOn, QuickPID::DIRECT);
+
 
 
 // Function prototypes --------------------------------------------------------------------
 void openCVT(int revSpeed);
 void closeCVT(int fwdSpeed);
 void stopCVT();
-void pastMin(int returnSpeed);
-void pastMax(int returnSpeed);
-int checkLimits();
+void getCommandRPM();
 void setCommandRPM();
-void setCommandHelix();
+void pastMin(int speed);
+void pastMax(int speed);
+int checkLimits();
+void setCommandHelix(int commandHelix);
 void helixRead();
 void helixCalibrate(int duration);
-void potRead();
 void batRead();
 void updateBatAverage(int newValue);
 void brake();
@@ -108,6 +164,8 @@ void exportOnboardData();
 void readBluetoothData();
 void processBluetoothData(String data);
 void exportBluetoothData();
+void justinAutoTuneStuff();
+float avg(int inputVal);
 
 // Functions ---------------------------------------------------------------------------
 
@@ -146,31 +204,27 @@ void setup() {
  // Set the pin modes for the brake input and launch button
  pinMode(27, 0x01);
  pinMode(15 /* can change this one*/, 0x05);
+
+ // AutoTuning
+ _myPID.AutoTune(tuningMethod::ZIEGLER_NICHOLS_PID);
+ _myPID.autoTune->autoTuneConfig(outputStep, hysteresis, setpoint, output, QuickPID::DIRECT, printOrPlotter, sampleTimeUs);
 }
 
 // Loop function
 void loop() {
  readOnboardData(); // Read onboard data
-/* 	if(SerialBT.connected()) {
+ if(SerialBT.connected()) {
+  readBluetoothData(); // Read bluetooth data
+ }
 
-		readBluetoothData(); // Read bluetooth data
+ if(actualRpm < 1500){
+  actualRpm = 1500;
+ }
 
-	} */
-# 166 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+ limitCheck = checkLimits();
+
  brake(); // Check brake conditions
 
- //HERES WHERE THE SHIT HAPPENS BABY --------------------------------------------------------------------------------------------
- if(launchActive == 0) {
-  setCommandRPM();
- } else if (launchActive == 1){
-  setCommandHelix(helixMin);
-
-  Onboard.println("Launch Active..,");
-  if(SerialBT.connected()) {
-   SerialBT.println("Launch Active..,");
-  }
- }
- //HERES WHERE THE SHIT ENDS BABY ------------------------------------------------------------------------------------------------
 
  /*     digitalWrite(motorForwardA, forwardA);
 
@@ -179,97 +233,78 @@ void loop() {
     digitalWrite(motorReverseA, reverseA);
 
     digitalWrite(motorReverseB, reverseB); */
-# 186 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
-/* 	if(SerialBT.connected()) {
+# 229 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
+ if(launchActive == 0) {
+  justinAutoTuneStuff();
 
-		exportBluetoothData();
+  exportOnboardData(); // Export onboard data
+  if(SerialBT.connected()) {
+   exportBluetoothData();
+  }
+ }
 
-	} */
-# 190 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
- exportOnboardData(); // Export onboard data
+ else if (launchActive == 1){
+  setCommandHelix(helixMin);
 
-/* 	// Perform tasks at a specific interval
-
-	if (millis() - iterationTimer >= iterationInterval) {
-
-		batRead(); // Read battery voltage
-
-
-
-		//exportOnboardData(); // Export onboard data
-
+  Onboard.println("Launch Active..,");
+  if(SerialBT.connected()) {
+   SerialBT.println("Launch Active..,");
+  }
+ }
 
 
-		iterationTimer = millis();
 
-	} */
-# 200 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+ // Perform tasks at a specific interval
+ if (millis() - updateTimer >= updateInterval) {
+  batRead(); // Read battery voltage
+
+  //exportOnboardData(); // Export onboard data
+
+  updateTimer = millis();
+ }
 }
 
 // Function to open the CVT
 void openCVT(int revSpeed) {
- helixRead();
-
- if(helixPos > (helixMin + 5) && helixPos < (helixMax+100)) { // Open the CVT if the helix position is within the limits
   if(motorState != 1) {
-   stopCVT();
-     digitalWrite(25 /* reverse + mosfet*/, 0x1); // motorReverseA ON
-   ledcAttachPin(2 /* reverse - mosfet*/, 1);
-   ledcWrite(1, revSpeed); // motorReverseA ON
-   motorState = 1;
+    stopCVT();
+    digitalWrite(25 /* reverse + mosfet*/, 0x1); // motorReverseA ON
+    ledcAttachPin(33 /* reverse - mosfet*/, 1);
+    ledcWrite(1, revSpeed); // motorReverseA ON
+    motorState = 1;
   }
 
   if(ledcRead(1) != revSpeed) {
-   ledcWrite(1, revSpeed);
+    ledcWrite(1, revSpeed);
   }
 
+  Onboard.print("Opening..,");
+ Onboard.println(revSpeed);
   if(SerialBT.connected()) {
-   SerialBT.println("Opening..,");
+    SerialBT.println("Opening..,");
   }
-  Onboard.println("Opening..,");
- }
-
- else if(!checkLimits()) { // Open the CVT if the helix position is above the maximum limit
-  stopCVT();
-  Onboard.println("Helix at min..,");
-  if(SerialBT.connected()) {
-   SerialBT.println("Helix at min..,");
-  }
- }
 }
 
 // Function to close the CVT
 void closeCVT(int fwdSpeed) {
- helixRead();
-
- if(helixPos < (helixMax-5) && helixPos > (helixMin-100)){ // Close the CVT if the helix position is within the limits
 
   if(motorState != 0) {
-   stopCVT();
-      digitalWrite(32 /* forward + mosfet*/, 0x1);
-   ledcAttachPin(26 /* forward - mosfet*/, 0);
-   ledcWrite(0, fwdSpeed); // motorForwardA ON
-   motorState = 0;
+    stopCVT();
+    digitalWrite(32 /* forward + mosfet*/, 0x1);
+    ledcAttachPin(26 /* forward - mosfet*/, 0);
+    ledcWrite(0, fwdSpeed); // motorForwardA ON
+    motorState = 0;
   }
 
   if(ledcRead(0) != fwdSpeed) {
-   ledcWrite(0, fwdSpeed);
+    ledcWrite(0, fwdSpeed);
   }
 
-  Onboard.println("Closing..,");
+  Onboard.print("Closing..,");
+ Onboard.println(fwdSpeed);
   if(SerialBT.connected()) {
-   SerialBT.println("Closing..,");
+    SerialBT.println("Closing..,");
   }
- }
-
- else if(!checkLimits()) { // Close the CVT if the helix position is below the minimum limit
-  stopCVT();
-
-  Onboard.println("Helix at max..,");
-  if(SerialBT.connected()) {
-   SerialBT.println("Helix at max..,");
-  }
- }
 }
 
 // Function to stop the CVT
@@ -278,7 +313,7 @@ void stopCVT() {
   digitalWrite(32 /* forward + mosfet*/, 0x0);
   digitalWrite(25 /* reverse + mosfet*/, 0x0);
  ledcDetachPin(26 /* forward - mosfet*/);
- ledcDetachPin(2 /* reverse - mosfet*/);
+ ledcDetachPin(33 /* reverse - mosfet*/);
 /* 	digitalWrite(motorForwardB, LOW);
 
 	digitalWrite(motorReverseB, LOW); */
@@ -295,6 +330,250 @@ void stopCVT() {
  }
 }
 
+// Function to set the command RPM
+void getCommandRPM() {
+ //throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+ throttlePos = map(rawThrottle, 0, 100, 0, 100);
+
+ throttlePos = ((throttlePos)<(0)?(0):((throttlePos)>(100)?(100):(throttlePos)));
+
+ if(throttlePos <= 5){
+  throttlePos = 0;
+ }
+
+ commandRpm = map(throttlePos, 0, 100, 1500, 3000);
+}
+
+/**
+
+ * Performs Justin's autotune stuff.
+
+ */
+# 342 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
+// Function to perform Justin's autotune stuff
+void justinAutoTuneStuff() {
+ helixRead();
+
+ if (_myPID.autoTune) {
+  // Check if autotune is in progress
+  switch (_myPID.autoTune->autoTuneLoop()) {
+
+   case _myPID.autoTune->AUTOTUNE:
+    // Read input and write output
+    Input = avg(actualRpm);
+
+    // Execute PID control signal
+    if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+     // Open CVT
+     openCVT(output); // Adjust PWM duty cycle for motor control
+    } else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+     // Close CVT
+     closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+    } else if (limitCheck == 0){
+     // Stop CVT
+     stopCVT();
+
+     Onboard.print("Setpoint reached..,");
+     Onboard.println(output);
+     if(SerialBT.connected()) {
+      SerialBT.println("Setpoint reached..,");
+     }
+    }
+    break;
+
+   case _myPID.autoTune->TUNINGS:
+    // Set new tunings and apply to PID
+    _myPID.autoTune->setAutoTuneConstants(&Kp, &Ki, &Kd);
+    _myPID.SetMode(QuickPID::AUTOMATIC);
+    _myPID.SetSampleTimeUs(sampleTimeUs);
+    _myPID.SetTunings(Kp, Ki, Kd, POn, DOn);
+    Setpoint = commandRpm;
+    break;
+
+   case _myPID.autoTune->CLR:
+    // Clear autotune and release memory
+    if (!pidLoop)
+    {
+     _myPID.clearAutoTune();
+     pidLoop = true;
+    }
+    break;
+
+  }
+ }
+
+ // Run PID loop
+ if (pidLoop)
+ {
+  if (printOrPlotter == 0)
+  {
+   // Print values for plotter
+   Onboard.print("Setpoint:");
+   Onboard.print(Setpoint);
+   Onboard.print(",");
+   Onboard.print("Input:");
+   Onboard.print(Input);
+   Onboard.print(",");
+   Onboard.print("Output:");
+   Onboard.print(Output);
+   Onboard.println(",");
+  }
+
+  // Read input and compute PID
+  Input = actualRpm;
+  _myPID.Compute();
+  // Execute PID control signal
+  if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+   // Open CVT
+   openCVT(output); // Adjust PWM duty cycle for motor control
+  } else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+   // Close CVT
+   closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+  } else if (limitCheck == 0){
+   // Stop CVT
+   stopCVT();
+
+   Onboard.print("Setpoint reached..,");
+   Onboard.println(output);
+   if(SerialBT.connected()) {
+    SerialBT.println("Setpoint reached..,");
+   }
+  }
+ }
+}
+
+float avg(int inputVal){
+  static int arrDat[16];
+  static int pos;
+  static long sum;
+  pos++;
+  if (pos >= 16)
+   pos = 0;
+  sum = sum - arrDat[pos] + inputVal;
+  arrDat[pos] = inputVal;
+  return (float)sum / 16.0;
+}
+
+/* void setCommandRPM(){
+
+
+
+  // Read the helix position
+
+  helixRead();
+
+
+
+  // Set the command RPM based on the throttle position
+
+  getCommandRPM();
+
+
+
+
+
+  // Calculate error
+
+  double error = commandRpm - actualRpm;
+
+
+
+  // Calculate integral term (approximate integral using trapezoidal rule)
+
+  integral += (error + previousError) * elapsedTime / Ti;  // Convert milliseconds to seconds
+
+
+
+  // Calculate derivative term
+
+  double derivative = (error - previousError) / (elapsedTime / Td);  // Convert milliseconds to seconds
+
+
+
+  // Compute PID output
+
+  output = Kp * error + Ki * integral + Kd * derivative;
+
+
+
+	Onboard.print("Error: ");
+
+	Onboard.print(error);
+
+	Onboard.print(", ");
+
+
+
+	Onboard.print("Integral: ");
+
+	Onboard.print(integral);
+
+	Onboard.print(", ");
+
+
+
+	Onboard.print("Derivative: ");
+
+	Onboard.print(derivative);
+
+	Onboard.println(", ");
+
+
+
+  // Update previous values for next iteration
+
+  previousError = error;
+
+
+
+  // Apply output to the system (e.g., adjust motor speed)
+
+  Serial.println(output);
+
+
+
+  // Ensure output is within acceptable bounds (e.g., for PWM control)
+
+  output = constrain(output, -255, 255);
+
+
+
+  // Execute PID control signal
+
+  if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+
+    // Open CVT
+
+    openCVT(output); // Adjust PWM duty cycle for motor control
+
+  } else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+
+    // Close CVT
+
+    closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+
+  } else if (limitCheck == 0){
+
+    // Stop CVT
+
+    stopCVT();
+
+		
+
+		Onboard.print("Setpoint reached..,");
+
+		Onboard.println(output);
+
+		if(SerialBT.connected()) {
+
+			SerialBT.println("Setpoint reached..,");
+
+		}
+
+  }
+
+} */
+# 507 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
 void pastMin(int speed) {
  if(motorState != 3){
   stopCVT();
@@ -318,7 +597,7 @@ void pastMax(int speed) {
  if(motorState != 4){
   stopCVT();
   digitalWrite(25 /* reverse + mosfet*/, 0x1);
-  ledcAttachPin(2 /* reverse - mosfet*/, 1);
+  ledcAttachPin(33 /* reverse - mosfet*/, 1);
   ledcWrite(1, speed); // motorReverseA ON
   motorState = 4;
  }
@@ -347,34 +626,12 @@ int checkLimits() {
  }
 }
 
-// Function to set the command RPM
-void setCommandRPM() {
- potRead();
-
- //commandRpm = map(throttlePos, 0, 100, 1500, 2500);
- commandRpm = map(throttlePos, 0, 100, 0, 1000);
-
- if((rpm+rpmVariance) < commandRpm) {
-  openCVT(openSpeed);
- } else if((rpm-rpmVariance) > commandRpm) {
-  closeCVT(closeSpeed);
- } else if (!checkLimits()) {
-  stopCVT();
-
-  if(SerialBT.connected()) {
-   SerialBT.println("RPM at setpoint..,");
-  }
-  Onboard.println("RPM at setpoint..,");
- }
-
-}
-
 void setCommandHelix(int commandHelix) {
- if (helixPos < commandHelix-10) {
+ if (helixPos < commandHelix-10 && limitCheck == 0) {
   openCVT(openSpeed);
- } else if (helixPos > commandHelix+10) {
+ } else if (helixPos > commandHelix+10 && limitCheck == 0) {
   closeCVT(closeSpeed);
- } else if (!checkLimits()) {
+ } else if (limitCheck == 0) {
   stopCVT();
 
   if(SerialBT.connected()) {
@@ -391,15 +648,6 @@ void helixRead() {
 
  // Convert the raw helix position to degrees
  //helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
-}
-
-// Function to read the throttle position
-void potRead() {
-
- //throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
- throttlePos = map(rawThrottle, 0, 100, 0, 100);
-
- throttlePos = ((throttlePos)<(0)?(0):((throttlePos)>(100)?(100):(throttlePos)));
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -497,7 +745,7 @@ void processOnboardData(String data) {
   } else if (item == "RevB"){
    reverseB = data.substring(dataIndex + 1).toInt();
   } else if (item == "RPM") {
-   rpm = data.substring(dataIndex + 1).toInt();
+   actualRpm = data.substring(dataIndex + 1).toInt();
   } else if (item == "Throttle") {
    rawThrottle = data.substring(dataIndex + 1).toInt();
   } else if (item == "Launch"){
@@ -506,11 +754,13 @@ void processOnboardData(String data) {
    helixPos = data.substring(dataIndex + 1).toInt();
   } else if (item == "Return"){
    returnSpeed = data.substring(dataIndex + 1).toInt();
-  } else if (item == "Open"){
-   openSpeed = data.substring(dataIndex + 1).toInt();
-  } else if (item == "Close"){
-   closeSpeed = data.substring(dataIndex + 1).toInt();
-  }
+  } else if (item == "Kp"){
+      Kp = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Ki"){
+      Ki = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Kd"){
+      Kd = data.substring(dataIndex + 1).toFloat();
+    }
  }
 }
 
@@ -533,7 +783,7 @@ void processBluetoothData(String data) {
   } else if (item == "Max"){
    helixMax = data.substring(dataIndex + 1).toInt();
   } else if (item == "RPM") {
-   rpm = data.substring(dataIndex + 1).toInt();
+   actualRpm = data.substring(dataIndex + 1).toInt();
   } else if (item == "Throttle") {
    rawThrottle = data.substring(dataIndex + 1).toInt();
   } else if (item == "Launch"){
@@ -544,7 +794,13 @@ void processBluetoothData(String data) {
    helixOffset = data.substring(dataIndex + 1).toInt();
   } else if (item == "Return"){
    returnSpeed = data.substring(dataIndex + 1).toInt();
-  }
+  } else if (item == "Kp"){
+      Kp = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Ki"){
+      Ki = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Kd"){
+      Kd = data.substring(dataIndex + 1).toFloat();
+    }
 
  }
 }
@@ -564,25 +820,33 @@ void exportOnboardData() {
  Onboard.print(",");
 
  Onboard.print("Reverse B:"); // 0-1
- Onboard.print(digitalRead(2 /* reverse - mosfet*/));
+ Onboard.print(digitalRead(33 /* reverse - mosfet*/));
  Onboard.print(",");
 
- Onboard.print("Battery:"); // 0-1
- Onboard.print(rawBattery);
- Onboard.print(",");
+/* 	Onboard.print("Battery:"); // 0-1
 
+	Onboard.print(rawBattery);
+
+	Onboard.print(","); */
+# 760 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
  Onboard.print("RPM:");
- Onboard.print(rpm);
+ Onboard.print(actualRpm);
+ Onboard.print(",");
+
+ Onboard.print("Commanded:");
+ Onboard.print(commandRpm);
  Onboard.print(",");
 
  Onboard.print("Throttle:"); // 0-1
  Onboard.print(throttlePos);
  Onboard.print(",");
 
- Onboard.print("Raw Throttle:"); // 0-1
- Onboard.print(rawThrottle);
- Onboard.print(",");
+/* 	Onboard.print("Raw Throttle:"); // 0-1
 
+	Onboard.print(rawThrottle);
+
+	Onboard.print(","); */
+# 776 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
  Onboard.print("Helix:"); // 0-1
  Onboard.print(helixPos);
  Onboard.print(",");
@@ -592,17 +856,21 @@ void exportOnboardData() {
 	Onboard.print(rawHelix);
 
 	Onboard.print(","); */
-# 587 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtCode\\ecvtCode.ino"
+# 784 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
  Onboard.print("Return Speed:"); // 0-1
  Onboard.print(returnSpeed);
  Onboard.print(",");
 
- Onboard.print("Open Speed:"); // 0-1
- Onboard.print(openSpeed);
+ Onboard.print("Kp:"); // 0-1
+ Onboard.print(Kp);
  Onboard.print(",");
 
- Onboard.print("Close Speed:"); // 0-1
- Onboard.print(closeSpeed);
+ Onboard.print("Ki:"); // 0-1
+ Onboard.print(Ki);
+ Onboard.print(",");
+
+ Onboard.print("Kd:"); // 0-1
+ Onboard.print(Kd);
  Onboard.println(",");
 }
 
@@ -620,11 +888,11 @@ void exportBluetoothData(){
  SerialBT.print(",");
 
  SerialBT.print("RevB:"); // 0-1
- SerialBT.print(digitalRead(2 /* reverse - mosfet*/));
+ SerialBT.print(digitalRead(33 /* reverse - mosfet*/));
  SerialBT.print(",");
 
  SerialBT.print("RPM:"); // 0-1
- SerialBT.print(rpm);
+ SerialBT.print(actualRpm);
  SerialBT.print(",");
 
  SerialBT.print("Commanded:");
@@ -639,23 +907,51 @@ void exportBluetoothData(){
  SerialBT.print(helixPos);
  SerialBT.print(",");
 
- SerialBT.print("Raw Helix:"); // 0-1
- SerialBT.print(rawHelix);
- SerialBT.print(",");
+/* 	SerialBT.print("Raw Helix:"); // 0-1
 
- SerialBT.print("Helix min:"); // 0-1
- SerialBT.print(helixMin);
- SerialBT.print(",");
+	SerialBT.print(rawHelix);
 
- SerialBT.print("Helix max:"); // 0-1
- SerialBT.print(helixMax);
- SerialBT.print(",");
+	SerialBT.print(","); */
+# 838 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
+/* 	SerialBT.print("Helix min:"); // 0-1
 
- SerialBT.print("Offset:"); // 0-1
- SerialBT.print(helixOffset);
- SerialBT.print(",");
+	SerialBT.print(helixMin);
 
+	SerialBT.print(",");
+
+
+
+	SerialBT.print("Helix max:"); // 0-1
+
+	SerialBT.print(helixMax);
+
+	SerialBT.print(",");
+
+
+
+	SerialBT.print("Offset:"); // 0-1
+
+	SerialBT.print(helixOffset);
+
+	SerialBT.print(","); */
+# 850 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtAutotune\\ecvtAutotune.ino"
  SerialBT.print("Launch:"); // 0-1
  SerialBT.print(launchActive);
+ SerialBT.println(",");
+
+ SerialBT.print("Return Speed:"); // 0-1
+ SerialBT.print(returnSpeed);
+ SerialBT.print(",");
+
+ SerialBT.print("Kp:"); // 0-1
+ SerialBT.print(Kp);
+ SerialBT.print(",");
+
+ SerialBT.print("Ki:"); // 0-1
+ SerialBT.print(Ki);
+ SerialBT.print(",");
+
+ SerialBT.print("Kd:"); // 0-1
+ SerialBT.print(Kd);
  SerialBT.println(",");
 }

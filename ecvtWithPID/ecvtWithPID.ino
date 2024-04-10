@@ -23,7 +23,7 @@ AS5600 Encoder; // AS5600 sensor
 #define motorForwardA 32  // forward + mosfet
 #define motorForwardB 26  // forward - mosfet
 #define motorReverseA 25  // reverse + mosfet
-#define motorReverseB 2  // reverse - mosfet
+#define motorReverseB 33  // reverse - mosfet
 
 int forwardA = 0;
 int forwardB = 0;
@@ -84,17 +84,21 @@ int closeSpeed = 150;
 int openSpeed = 150;
 int returnSpeed = 100;
 
+int limitCheck = 1;
+
 // PID shit
 // Define PID parameters
 double Kp = 0.1;  // Proportional gain
-double Ki = 0.001;  // Integral gain
-double Kd = 0;  // Derivative gain
+double Ki = 0.1;  // Integral gain
+double Kd = 0.01;  	// Derivative gain
+double Ti = 100;	// Integral time constant
+double Td = 1000;	// Derivative time constant
 
 double output = 0;  // Output control signal
 
 double previousError = 0;
 double integral = 0;
-int pidInterval = 100;
+int pidInterval = 1;
 int pidTimer;
 
 // Serial communication
@@ -177,6 +181,12 @@ void loop() {
 		readBluetoothData(); // Read bluetooth data
 	}
 
+	if(actualRpm < 1500){
+		actualRpm = 1500;
+	}
+
+	limitCheck = checkLimits();
+	
 	brake(); // Check brake conditions
 
 
@@ -233,7 +243,8 @@ void openCVT(int revSpeed) {
     ledcWrite(1, revSpeed);
   }
 
-  Onboard.println("Opening..,");
+  Onboard.print("Opening..,");
+	Onboard.println(revSpeed);
   if(SerialBT.connected()) {
     SerialBT.println("Opening..,");
   }
@@ -254,7 +265,8 @@ void closeCVT(int fwdSpeed) {
     ledcWrite(0, fwdSpeed);
   }
 
-  Onboard.println("Closing..,");
+  Onboard.print("Closing..,");
+	Onboard.println(fwdSpeed);
   if(SerialBT.connected()) {
     SerialBT.println("Closing..,");
   }
@@ -290,8 +302,11 @@ void getCommandRPM() {
 
 	throttlePos = constrain(throttlePos, 0, 100);
 
-	//commandRpm = map(throttlePos, 0, 100, 1500, 2500);
-	commandRpm = map(throttlePos, 0, 100, 0, 1000);
+	if(throttlePos <= 5){
+		throttlePos = 0;
+	}
+
+	commandRpm = map(throttlePos, 0, 100, 1500, 3000);
 }
 
 void setCommandRPM(){
@@ -307,13 +322,25 @@ void setCommandRPM(){
   double error = commandRpm - actualRpm;
 
   // Calculate integral term (approximate integral using trapezoidal rule)
-  integral += (error + previousError) * elapsedTime / 2000.0;  // Convert milliseconds to seconds
+  integral += (error + previousError) * elapsedTime / Ti;  // Convert milliseconds to seconds
 
   // Calculate derivative term
-  double derivative = (error - previousError) / (elapsedTime / 1000.0);  // Convert milliseconds to seconds
+  double derivative = (error - previousError) / (elapsedTime / Td);  // Convert milliseconds to seconds
 
   // Compute PID output
   output = Kp * error + Ki * integral + Kd * derivative;
+
+	Onboard.print("Error: ");
+	Onboard.print(error);
+	Onboard.print(", ");
+
+	Onboard.print("Integral: ");
+	Onboard.print(integral);
+	Onboard.print(", ");
+
+	Onboard.print("Derivative: ");
+	Onboard.print(derivative);
+	Onboard.println(", ");
 
   // Update previous values for next iteration
   previousError = error;
@@ -324,18 +351,22 @@ void setCommandRPM(){
   // Ensure output is within acceptable bounds (e.g., for PWM control)
   output = constrain(output, -255, 255);
 
-	int limitCheck = checkLimits();
-
   // Execute PID control signal
-  if (output > 0 && !limitCheck) {
+  if (output > 0 && limitCheck==0 && helixPos > helixMin) {
     // Open CVT
     openCVT(output); // Adjust PWM duty cycle for motor control
-  } else if (output < 0 && !limitCheck) {
+  } else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
     // Close CVT
     closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
-  } else if (!limitCheck){
+  } else if (limitCheck == 0){
     // Stop CVT
     stopCVT();
+		
+		Onboard.print("Setpoint reached..,");
+		Onboard.println(output);
+		if(SerialBT.connected()) {
+			SerialBT.println("Setpoint reached..,");
+		}
   }
 }
 
@@ -392,11 +423,11 @@ int checkLimits() {
 }
 
 void setCommandHelix(int commandHelix) {
-	if (helixPos < commandHelix-10) {
+	if (helixPos < commandHelix-10 && limitCheck == 0) {
 		openCVT(openSpeed);
-	} else if (helixPos > commandHelix+10) {
+	} else if (helixPos > commandHelix+10 && limitCheck == 0) {
 		closeCVT(closeSpeed);
-	} else if (!checkLimits()) {
+	} else if (limitCheck == 0) {
 		stopCVT();
 
 		if(SerialBT.connected()) {
@@ -594,6 +625,10 @@ void exportOnboardData() {
 
 	Onboard.print("RPM:");
 	Onboard.print(actualRpm);
+	Onboard.print(",");
+
+	Onboard.print("Commanded:");
+	Onboard.print(commandRpm);
 	Onboard.print(",");
 
 	Onboard.print("Throttle:"); // 0-1

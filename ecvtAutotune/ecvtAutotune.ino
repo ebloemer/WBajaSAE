@@ -86,7 +86,7 @@ int returnSpeed = 100;
 
 int limitCheck = 1;
 
-// PID shit
+/* // PID shit
 // Define PID parameters
 double Kp = 0.1;  // Proportional gain
 double Ki = 0.1;  // Integral gain
@@ -99,7 +99,7 @@ double output = 0;  // Output control signal
 double previousError = 0;
 double integral = 0;
 int pidInterval = 1;
-int pidTimer;
+int pidTimer; */
 
 // Serial communication
 String incomingOnboardData = "";
@@ -111,6 +111,31 @@ int elapsedTime;
 unsigned long updateTimer = 0;
 const int updateInterval = 50;
 int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
+
+// Autotune Stuff ------------------------------------------------------
+#include <QuickPID.h>
+
+const uint32_t sampleTimeUs = 10000; // 10ms
+const byte inputPin = 0;
+const byte outputPin = 3;
+const int outputMax = 255;
+const int outputMin = -255;
+
+bool printOrPlotter = 0; // on(1) monitor, off(0) plotter
+float POn = 1.0;		 // proportional on Error to Measurement ratio (0.0-1.0), default = 1.0
+float DOn = 0.0;		 // derivative on Error to Measurement ratio (0.0-1.0), default = 0.0
+
+byte outputStep = 5;
+byte hysteresis = 1;
+int setpoint = 341; // 1/3 of range for symetrical waveform
+int output = 85;	// 1/3 of range for symetrical waveform
+
+float Input, Output, Setpoint;
+float Kp = 0, Ki = 0, Kd = 0;
+bool pidLoop = false;
+
+QuickPID _myPID = QuickPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, POn, DOn, QuickPID::DIRECT);
+
 
 
 // Function prototypes --------------------------------------------------------------------
@@ -134,6 +159,8 @@ void exportOnboardData();
 void readBluetoothData();
 void processBluetoothData(String data);
 void exportBluetoothData();
+void justinAutoTuneStuff();
+float avg(int inputVal);
 
 // Functions ---------------------------------------------------------------------------
 
@@ -155,9 +182,7 @@ void setup() {
 
 	// Set the pin modes for the motor control pins
 	pinMode(motorForwardA, OUTPUT);
-	//pinMode(motorForwardB, OUTPUT);
 	pinMode(motorReverseA, OUTPUT);
-	//pinMode(motorReverseB, OUTPUT);
 
 	// Setup LEDC for PWM
 	ledcSetup(0, 1000, 8);		//forward
@@ -172,6 +197,10 @@ void setup() {
 	// Set the pin modes for the brake input and launch button
 	pinMode(brakeInput, INPUT);
 	pinMode(launchButton, INPUT_PULLUP);
+
+	// AutoTuning
+	_myPID.AutoTune(tuningMethod::ZIEGLER_NICHOLS_PID);
+	_myPID.autoTune->autoTuneConfig(outputStep, hysteresis, setpoint, output, QuickPID::DIRECT, printOrPlotter, sampleTimeUs);
 }
 
 // Loop function
@@ -188,24 +217,14 @@ void loop() {
 	limitCheck = checkLimits();
 	
 	brake(); // Check brake conditions
-
-
-	/*     digitalWrite(motorForwardA, forwardA);
-    digitalWrite(motorForwardB, forwardB);
-    digitalWrite(motorReverseA, reverseA);
-    digitalWrite(motorReverseB, reverseB); */
-
-  elapsedTime = millis() - pidTimer;
 	
-	if(launchActive == 0 && elapsedTime >= pidInterval) {
-		setCommandRPM();
+	if(launchActive == 0) {
+		justinAutoTuneStuff();
 
 		exportOnboardData(); // Export onboard data
 		if(SerialBT.connected()) {
 			exportBluetoothData();
 		}
-
-		pidTimer = millis();
 	} 
 	
 	else if (launchActive == 1){
@@ -309,7 +328,114 @@ void getCommandRPM() {
 	commandRpm = map(throttlePos, 0, 100, 1500, 3000);
 }
 
-void setCommandRPM(){
+/**
+ * Performs Justin's autotune stuff.
+ */
+// Function to perform Justin's autotune stuff
+void justinAutoTuneStuff() {
+	helixRead();
+
+	if (_myPID.autoTune) {
+		// Check if autotune is in progress
+		switch (_myPID.autoTune->autoTuneLoop()) {
+
+			case _myPID.autoTune->AUTOTUNE:
+				// Read input and write output
+				Input = avg(actualRpm);
+
+				// Execute PID control signal
+				if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+					// Open CVT
+					openCVT(output); // Adjust PWM duty cycle for motor control
+				} else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+					// Close CVT
+					closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+				} else if (limitCheck == 0){
+					// Stop CVT
+					stopCVT();
+					
+					Onboard.print("Setpoint reached..,");
+					Onboard.println(output);
+					if(SerialBT.connected()) {
+						SerialBT.println("Setpoint reached..,");
+					}
+				}
+				break;
+
+			case _myPID.autoTune->TUNINGS:
+				// Set new tunings and apply to PID
+				_myPID.autoTune->setAutoTuneConstants(&Kp, &Ki, &Kd);
+				_myPID.SetMode(QuickPID::AUTOMATIC);
+				_myPID.SetSampleTimeUs(sampleTimeUs);
+				_myPID.SetTunings(Kp, Ki, Kd, POn, DOn);
+				Setpoint = commandRpm;
+				break;
+
+			case _myPID.autoTune->CLR:
+				// Clear autotune and release memory
+				if (!pidLoop)
+				{
+					_myPID.clearAutoTune();
+					pidLoop = true;
+				}
+				break;
+
+		}
+	}
+
+	// Run PID loop
+	if (pidLoop)
+	{
+		if (printOrPlotter == 0)
+		{
+			// Print values for plotter
+			Onboard.print("Setpoint:");
+			Onboard.print(Setpoint);
+			Onboard.print(",");
+			Onboard.print("Input:");
+			Onboard.print(Input);
+			Onboard.print(",");
+			Onboard.print("Output:");
+			Onboard.print(Output);
+			Onboard.println(",");
+		}
+
+		// Read input and compute PID
+		Input = actualRpm;
+		_myPID.Compute();
+		// Execute PID control signal
+		if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+			// Open CVT
+			openCVT(output); // Adjust PWM duty cycle for motor control
+		} else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+			// Close CVT
+			closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
+		} else if (limitCheck == 0){
+			// Stop CVT
+			stopCVT();
+			
+			Onboard.print("Setpoint reached..,");
+			Onboard.println(output);
+			if(SerialBT.connected()) {
+				SerialBT.println("Setpoint reached..,");
+			}
+		}
+	}
+}
+
+float avg(int inputVal){
+		static int arrDat[16];
+		static int pos;
+		static long sum;
+		pos++;
+		if (pos >= 16)
+			pos = 0;
+		sum = sum - arrDat[pos] + inputVal;
+		arrDat[pos] = inputVal;
+		return (float)sum / 16.0;
+}
+
+/* void setCommandRPM(){
 
   // Read the helix position
   helixRead();
@@ -368,7 +494,7 @@ void setCommandRPM(){
 			SerialBT.println("Setpoint reached..,");
 		}
   }
-}
+} */
 
 void pastMin(int speed) {
 	if(motorState != 3){
