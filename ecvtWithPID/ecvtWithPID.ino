@@ -80,9 +80,9 @@ int helixMin = 0;
 float helixOffset = 166;
 float rawHelixDegrees = 0;
 
-int closeSpeed = 200;
-int openSpeed = 200;
-int returnSpeed = 150;
+int closeSpeed = 150;
+int openSpeed = 150;
+int returnSpeed = 100;
 
 // PID shit
 // Define PID parameters
@@ -185,27 +185,29 @@ void loop() {
     digitalWrite(motorReverseA, reverseA);
     digitalWrite(motorReverseB, reverseB); */
 
-	if(SerialBT.connected()) {
-		exportBluetoothData();
-	}
-
-	exportOnboardData(); // Export onboard data
-
   elapsedTime = millis() - pidTimer;
+	
+	if(launchActive == 0 && elapsedTime >= pidInterval) {
+		setCommandRPM();
 
-  	// Perform tasks at a specific interval
-	if (elapsedTime >= pidInterval) {
-      if(launchActive == 0) {
-      setCommandRPM();
-    } else if (launchActive == 1){
-			setCommandHelix(helixMin);
+		exportOnboardData(); // Export onboard data
+		if(SerialBT.connected()) {
+			exportBluetoothData();
+		}
 
-      Onboard.println("Launch Active..,");
-      if(SerialBT.connected()) {
-        SerialBT.println("Launch Active..,");
-      }
-    }
+		pidTimer = millis();
+	} 
+	
+	else if (launchActive == 1){
+		setCommandHelix(helixMin);
+
+		Onboard.println("Launch Active..,");
+		if(SerialBT.connected()) {
+			SerialBT.println("Launch Active..,");
+		}
 	}
+
+		
 
 	// Perform tasks at a specific interval
 	if (millis() - updateTimer >= updateInterval) {
@@ -517,11 +519,13 @@ void processOnboardData(String data) {
 			helixPos = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Return"){
 			returnSpeed = data.substring(dataIndex + 1).toInt();
-		} else if (item == "Open"){
-			openSpeed = data.substring(dataIndex + 1).toInt();
-		} else if (item == "Close"){
-			closeSpeed = data.substring(dataIndex + 1).toInt();
-		}
+		} else if (item == "Kp"){
+      Kp = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Ki"){
+      Ki = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Kd"){
+      Kd = data.substring(dataIndex + 1).toFloat();
+    }
 	}
 }
 
@@ -555,7 +559,13 @@ void processBluetoothData(String data) {
 			helixOffset = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Return"){
 			returnSpeed = data.substring(dataIndex + 1).toInt();
-		}
+		} else if (item == "Kp"){
+      Kp = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Ki"){
+      Ki = data.substring(dataIndex + 1).toFloat();
+    } else if (item == "Kd"){
+      Kd = data.substring(dataIndex + 1).toFloat();
+    }
     
 	}
 }
@@ -578,9 +588,9 @@ void exportOnboardData() {
 	Onboard.print(digitalRead(motorReverseB));
 	Onboard.print(",");
 
-	Onboard.print("Battery:"); // 0-1
+/* 	Onboard.print("Battery:"); // 0-1
 	Onboard.print(rawBattery);
-	Onboard.print(",");
+	Onboard.print(","); */
 
 	Onboard.print("RPM:");
 	Onboard.print(actualRpm);
@@ -590,9 +600,9 @@ void exportOnboardData() {
 	Onboard.print(throttlePos);
 	Onboard.print(",");
 
-	Onboard.print("Raw Throttle:"); // 0-1
+/* 	Onboard.print("Raw Throttle:"); // 0-1
 	Onboard.print(rawThrottle);
-	Onboard.print(",");
+	Onboard.print(","); */
 
 	Onboard.print("Helix:"); // 0-1
 	Onboard.print(helixPos);
@@ -606,12 +616,16 @@ void exportOnboardData() {
 	Onboard.print(returnSpeed);
 	Onboard.print(",");
 
-	Onboard.print("Open Speed:"); // 0-1
-	Onboard.print(openSpeed);
-	Onboard.println(",");
+	Onboard.print("Kp:"); // 0-1
+	Onboard.print(Kp);
+	Onboard.print(",");
 
-	Onboard.print("Close Speed:"); // 0-1
-	Onboard.print(closeSpeed);
+	Onboard.print("Ki:"); // 0-1
+	Onboard.print(Ki);
+	Onboard.print(",");
+
+	Onboard.print("Kd:"); // 0-1
+	Onboard.print(Kd);
 	Onboard.println(",");
 }
 
@@ -648,11 +662,11 @@ void exportBluetoothData(){
 	SerialBT.print(helixPos);
 	SerialBT.print(",");
 
-	SerialBT.print("Raw Helix:"); // 0-1
+/* 	SerialBT.print("Raw Helix:"); // 0-1
 	SerialBT.print(rawHelix);
-	SerialBT.print(",");
+	SerialBT.print(","); */
 
-	SerialBT.print("Helix min:"); // 0-1
+/* 	SerialBT.print("Helix min:"); // 0-1
 	SerialBT.print(helixMin);
 	SerialBT.print(",");
 
@@ -662,9 +676,25 @@ void exportBluetoothData(){
 
 	SerialBT.print("Offset:"); // 0-1
 	SerialBT.print(helixOffset);
-	SerialBT.print(",");
+	SerialBT.print(","); */
 
 	SerialBT.print("Launch:"); // 0-1
 	SerialBT.print(launchActive);
+	SerialBT.println(",");
+
+	SerialBT.print("Return Speed:"); // 0-1
+	SerialBT.print(returnSpeed);
+	SerialBT.print(",");
+
+	SerialBT.print("Kp:"); // 0-1
+	SerialBT.print(Kp);
+	SerialBT.print(",");
+
+	SerialBT.print("Ki:"); // 0-1
+	SerialBT.print(Ki);
+	SerialBT.print(",");
+
+	SerialBT.print("Kd:"); // 0-1
+	SerialBT.print(Kd);
 	SerialBT.println(",");
 }

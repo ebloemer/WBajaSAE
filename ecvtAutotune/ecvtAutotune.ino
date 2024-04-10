@@ -555,8 +555,7 @@ void processBluetoothData(String data) {
 			helixOffset = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Return"){
 			returnSpeed = data.substring(dataIndex + 1).toInt();
-		}
-    
+		} 
 	}
 }
 
