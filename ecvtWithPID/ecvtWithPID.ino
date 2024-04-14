@@ -10,7 +10,7 @@
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
 
-// serial communication
+// Serial communication
 HardwareSerial Onboard(0); // UART0
 BluetoothSerial SerialBT; // Bluetooth debug
 
@@ -25,29 +25,26 @@ AS5600 Encoder; // AS5600 sensor
 #define motorReverseA 25  // reverse + mosfet
 #define motorReverseB 33  // reverse - mosfet
 
-int forwardA = 0;
-int forwardB = 0;
-int reverseA = 0;
-int reverseB = 0;
-
 // Low Power Inputs
-#define linkRx 3
-#define linkTx 1
 #define engineSensor  12
 #define batterySensor 36
 #define brakeInput    27
-#define launchButton  15  // can change this one
 
+// Communication Pins
+#define linkRx 3
+#define linkTx 1
 #define SDA 21
 #define SCL 22
 
 // Variable declarations ----------------------------------------------------------------
 
 // Battery variables:
-int rawBattery;
-int batPercent;
 int batLowLimit = 2150;
 int batHighLimit = 3180;
+
+int rawBattery = batLowLimit;
+int batPercent;
+
 const int batSamples = 200;
 int batLogger[batSamples];
 int batIndex = 0;
@@ -62,15 +59,18 @@ int rpmVariance = 50;
 int launchActive = 0; // This is (1) when the CVT needs to be open/system is in launch mode
 
 // Brake variables
+unsigned long brakeTimer;
+const int brakeDebounce = 100;
+
 int brakePrevState = 0;
-unsigned long brakeDebounce;
 int brakeStatus = 0;  // This is (1) when the brake has been pressed for 1/2 second or more
 
 // Throttle variables
-int rawThrottle = 0;
-int throttlePos = 0;
 int throttleMin = 2910;
 int throttleMax = 1820;
+
+int rawThrottle = throttleMin;
+int throttlePos = 0;
 
 // Helix variables
 float rawHelix = 0;
@@ -78,7 +78,9 @@ float helixPos = 0;
 int helixMax = 47;
 int helixMin = 0;
 float helixOffset = 166;
-float rawHelixDegrees = 0;
+
+int helixMinVariance = 5;
+int helixMaxVariance = 5;
 
 int closeSpeed = 150;
 int openSpeed = 150;
@@ -86,7 +88,14 @@ int returnSpeed = 100;
 
 int limitCheck = 1;
 
-// PID shit
+// Motor variables
+int forwardA = 0;
+int forwardB = 0;
+int reverseA = 0;
+int reverseB = 0;
+
+int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
+
 // Define PID parameters
 double Kp = 0.1;  // Proportional gain
 double Ki = 0.1;  // Integral gain
@@ -94,23 +103,22 @@ double Kd = 0.01;  	// Derivative gain
 double Ti = 100;	// Integral time constant
 double Td = 1000;	// Derivative time constant
 
-double output = 0;  // Output control signal
-
 double previousError = 0;
 double integral = 0;
-int pidInterval = 1;
-int pidTimer;
+double output = 0;  // Output control signal
+
+unsigned long pidPrevTime = 0;
+const int pidInterval = 1;	// Controls how often the PID loop runs in milliseconds
+int pidElapsedTime;
 
 // Serial communication
 String incomingOnboardData = "";
 String incomingBluetoothData = "";
 
-// Global variables
-const int debounce = 100;
-int elapsedTime;
+// Runtime variables
 unsigned long updateTimer = 0;
 const int updateInterval = 50;
-int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
+
 
 
 // Function prototypes --------------------------------------------------------------------
@@ -155,9 +163,7 @@ void setup() {
 
 	// Set the pin modes for the motor control pins
 	pinMode(motorForwardA, OUTPUT);
-	//pinMode(motorForwardB, OUTPUT);
 	pinMode(motorReverseA, OUTPUT);
-	//pinMode(motorReverseB, OUTPUT);
 
 	// Setup LEDC for PWM
 	ledcSetup(0, 1000, 8);		//forward
@@ -167,37 +173,36 @@ void setup() {
 	pinMode(engineSensor, INPUT);
 	pinMode(batterySensor, INPUT);
 
-	stopCVT();
-
 	// Set the pin modes for the brake input and launch button
 	pinMode(brakeInput, INPUT);
-	pinMode(launchButton, INPUT_PULLUP);
+
+	// Ensure the motor is stopped
+	stopCVT();
 }
 
 // Loop function
 void loop() {
+
+	limitCheck = checkLimits();		//purely incase I forget in any scenario
+
+	// Read serial data
 	readOnboardData(); // Read onboard data
 	if(SerialBT.connected()) {
 		readBluetoothData(); // Read bluetooth data
 	}
 
-	if(actualRpm < 1500){
+	if(actualRpm < 1500){	// Correct for low idling/starting RPM
 		actualRpm = 1500;
 	}
-
-	limitCheck = checkLimits();
 	
 	brake(); // Check brake conditions
 
+	// This begins 'useful' code--------------------------------------------------------------------------
 
-	/*     digitalWrite(motorForwardA, forwardA);
-    digitalWrite(motorForwardB, forwardB);
-    digitalWrite(motorReverseA, reverseA);
-    digitalWrite(motorReverseB, reverseB); */
+	// Normal operation
+  pidElapsedTime = millis() - pidPrevTime;
 
-  elapsedTime = millis() - pidTimer;
-	
-	if(launchActive == 0 && elapsedTime >= pidInterval) {
+	if(launchActive == 0 && pidElapsedTime >= pidInterval) {
 		setCommandRPM();
 
 		exportOnboardData(); // Export onboard data
@@ -205,9 +210,10 @@ void loop() {
 			exportBluetoothData();
 		}
 
-		pidTimer = millis();
+		pidPrevTime = millis();
 	} 
 	
+	// Launch operation
 	else if (launchActive == 1){
 		setCommandHelix(helixMin);
 
@@ -217,9 +223,9 @@ void loop() {
 		}
 	}
 
-		
+	// This ends 'useful' code--------------------------------------------------------------------------
 
-	// Perform tasks at a specific interval
+	// Update certain parameters at a fixed interval
 	if (millis() - updateTimer >= updateInterval) {
 		batRead(); // Read battery voltage
 
@@ -231,74 +237,91 @@ void loop() {
 
 // Function to open the CVT
 void openCVT(int revSpeed) {
-  if(motorState != 1) {
-    stopCVT();
-    digitalWrite(motorReverseA, HIGH); // motorReverseA ON
-    ledcAttachPin(motorReverseB, 1);
-    ledcWrite(1, revSpeed); // motorReverseA ON
-    motorState = 1;
-  }
+	// Check if the motor is already in the reverse state
+	if(motorState != 1) {
+		stopCVT();
+		digitalWrite(motorReverseA, HIGH); // Turn on the reverse + mosfet
+		ledcAttachPin(motorReverseB, 1); // Attach the reverse - mosfet to LEDC channel 1
+		ledcWrite(1, revSpeed); // Set the speed of the reverse - mosfet
+		motorState = 1;
+	}
 
-  if(ledcRead(1) != revSpeed) {
-    ledcWrite(1, revSpeed);
-  }
+	// Check if the speed of the reverse - mosfet needs to be updated
+	if(ledcRead(1) != revSpeed) {
+		ledcWrite(1, revSpeed);
+	}
 
-  Onboard.print("Opening..,");
+	// Print the opening message to the onboard serial communication
+	Onboard.print("Opening..,");
 	Onboard.println(revSpeed);
-  if(SerialBT.connected()) {
-    SerialBT.println("Opening..,");
-  }
+
+	// Print the opening message to the Bluetooth serial communication if connected
+	if(SerialBT.connected()) {
+		SerialBT.println("Opening..,");
+	}
 }
 
 // Function to close the CVT
 void closeCVT(int fwdSpeed) {
+	// Check if the motor is already in the forward state
+	if(motorState != 0) {
+		stopCVT();
+		digitalWrite(motorForwardA, HIGH); // Turn on the forward + mosfet
+		ledcAttachPin(motorForwardB, 0); // Attach the forward - mosfet to LEDC channel 0
+		ledcWrite(0, fwdSpeed); // Set the speed of the forward - mosfet
+		motorState = 0;
+	}
 
-  if(motorState != 0) {
-    stopCVT();
-    digitalWrite(motorForwardA, HIGH);
-    ledcAttachPin(motorForwardB, 0);
-    ledcWrite(0, fwdSpeed); // motorForwardA ON
-    motorState = 0;
-  }
+	// Check if the speed of the forward - mosfet needs to be updated
+	if(ledcRead(0) != fwdSpeed) {
+		ledcWrite(0, fwdSpeed);
+	}
 
-  if(ledcRead(0) != fwdSpeed) {
-    ledcWrite(0, fwdSpeed);
-  }
-
-  Onboard.print("Closing..,");
+	// Print the closing message to the onboard serial communication
+	Onboard.print("Closing..,");
 	Onboard.println(fwdSpeed);
-  if(SerialBT.connected()) {
-    SerialBT.println("Closing..,");
-  }
+
+	// Print the closing message to the Bluetooth serial communication if connected
+	if(SerialBT.connected()) {
+		SerialBT.println("Closing..,");
+	}
 }
 
 // Function to stop the CVT
 void stopCVT() {
+	// Read the helix position
 	helixRead();
-  digitalWrite(motorForwardA, LOW);
-  digitalWrite(motorReverseA, LOW);
+
+	// Turn off the forward and reverse + mosfets
+	digitalWrite(motorForwardA, LOW);
+	digitalWrite(motorReverseA, LOW);
+
+	// Detach the forward and reverse - mosfets from LEDC channels
 	ledcDetachPin(motorForwardB);
 	ledcDetachPin(motorReverseB);
-/* 	digitalWrite(motorForwardB, LOW);
-	digitalWrite(motorReverseB, LOW); */
-	
+
+	// Set the speed of the LEDC channels to idle
 	ledcWrite(0, 0);
 	ledcWrite(1, 0);
 
+	// Delay for 1 millisecond to ensure the motor is disconnected
 	delay(1);
 
+	// Update the motor state to indicate that it is stopped
 	motorState = 2;
 
+	// Print the stopping message to the onboard serial communication
 	Onboard.print("Stopping..,");
+
+	// Print the stopping message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
 		SerialBT.print("Stopping..,");
 	}
 }
 
-// Function to set the command RPM
+// Function to get the command RPM
 void getCommandRPM() {
-	//throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
-	throttlePos = map(rawThrottle, 0, 100, 0, 100);
+	throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
 
 	throttlePos = constrain(throttlePos, 0, 100);
 
@@ -309,27 +332,25 @@ void getCommandRPM() {
 	commandRpm = map(throttlePos, 0, 100, 1500, 3000);
 }
 
+// Function to set the command RPM
 void setCommandRPM(){
-
-  // Read the helix position
-  helixRead();
 
   // Set the command RPM based on the throttle position
   getCommandRPM();
-
 
   // Calculate error
   double error = commandRpm - actualRpm;
 
   // Calculate integral term (approximate integral using trapezoidal rule)
-  integral += (error + previousError) * elapsedTime / Ti;  // Convert milliseconds to seconds
+  integral += (error + previousError) * pidElapsedTime / Ti;  // Convert milliseconds to seconds
 
   // Calculate derivative term
-  double derivative = (error - previousError) / (elapsedTime / Td);  // Convert milliseconds to seconds
+  double derivative = (error - previousError) / (pidElapsedTime / Td);  // Convert milliseconds to seconds
 
   // Compute PID output
   output = Kp * error + Ki * integral + Kd * derivative;
 
+	// Print PID parameters
 	Onboard.print("Error: ");
 	Onboard.print(error);
 	Onboard.print(", ");
@@ -345,17 +366,17 @@ void setCommandRPM(){
   // Update previous values for next iteration
   previousError = error;
 
-  // Apply output to the system (e.g., adjust motor speed)
-  Serial.println(output);
-
   // Ensure output is within acceptable bounds (e.g., for PWM control)
   output = constrain(output, -255, 255);
 
+	// Read the helix position
+  limitCheck = checkLimits();
+
   // Execute PID control signal
-  if (output > 0 && limitCheck==0 && helixPos > helixMin) {
+  if (output > 0 && limitCheck==0 && helixPos > (helixMin+helixMinVariance)) {
     // Open CVT
     openCVT(output); // Adjust PWM duty cycle for motor control
-  } else if (output < 0 && limitCheck==0 && helixPos < helixMax) {
+  } else if (output < 0 && limitCheck==0 && helixPos < (helixMax-helixMaxVariance)) {
     // Close CVT
     closeCVT(abs(output)); // Adjust PWM duty cycle for motor control
   } else if (limitCheck == 0){
@@ -370,69 +391,100 @@ void setCommandRPM(){
   }
 }
 
+// Function to handle when the helix position is past the minimum limit
 void pastMin(int speed) {
-	if(motorState != 3){
+	// Check if the motor state is not already indicating past the minimum limit
+	if (motorState != 3) {
 		stopCVT();
-		digitalWrite(motorForwardA, HIGH);
-		ledcAttachPin(motorForwardB, 0);
-		ledcWrite(0, speed); // motorForwardA ON
+		digitalWrite(motorForwardA, HIGH); // Turn on the forward + mosfet
+		ledcAttachPin(motorForwardB, 0); // Attach the forward - mosfet to LEDC channel 0
+		ledcWrite(0, speed); // Set the speed of the forward - mosfet
 		motorState = 3;
 	}
 
-	if(ledcRead(0) != speed) {
+	// Check if the speed of the forward - mosfet needs to be updated
+	if (ledcRead(0) != speed) {
 		ledcWrite(0, speed);
 	}
 
+	// Print the message indicating that the helix is past the minimum limit to the onboard serial communication
 	Onboard.println("Helix PAST min..,");
-	if(SerialBT.connected()) {
+
+	// Print the message indicating that the helix is past the minimum limit to the Bluetooth serial communication if connected
+	if (SerialBT.connected()) {
 		SerialBT.println("Helix PAST min..,");
 	}
 }
 
+// Function to handle when the helix position is past the maximum limit
 void pastMax(int speed) {
-	if(motorState != 4){
+	// Check if the motor state is not already indicating past the maximum limit
+	if (motorState != 4) {
 		stopCVT();
-		digitalWrite(motorReverseA, HIGH);
-		ledcAttachPin(motorReverseB, 1);
-		ledcWrite(1, speed); // motorReverseA ON
+		digitalWrite(motorReverseA, HIGH); // Turn on the reverse + mosfet
+		ledcAttachPin(motorReverseB, 1); // Attach the reverse - mosfet to LEDC channel 1
+		ledcWrite(1, speed); // Set the speed of the reverse - mosfet
 		motorState = 4;
 	}
 
-	if(ledcRead(1) != speed) {
+	// Check if the speed of the reverse - mosfet needs to be updated
+	if (ledcRead(1) != speed) {
 		ledcWrite(1, speed);
 	}
 
+	// Print the message indicating that the helix is past the maximum limit to the onboard serial communication
 	Onboard.println("Helix PAST max..,");
-	if(SerialBT.connected()) {
+
+	// Print the message indicating that the helix is past the maximum limit to the Bluetooth serial communication if connected
+	if (SerialBT.connected()) {
 		SerialBT.println("Helix PAST max..,");
 	}
 }
 
+// Function to check if the helix position is within the limits
 int checkLimits() {
-	helixRead();
+	helixRead(); // Read the helix position from the sensor
 
-	if (helixPos > (helixMax+5)) {
-		pastMax(returnSpeed);
+	// Check if the helix position is past the maximum limit
+	if (helixPos > (helixMax + helixMaxVariance)) {
+		pastMax(returnSpeed); // Handle when the helix position is past the maximum limit
 		return 1;
-	} else if (helixPos < (helixMin-5)) {
-		pastMin(returnSpeed);
+	}
+	// Check if the helix position is past the minimum limit
+	else if (helixPos < (helixMin - helixMinVariance)) {
+		pastMin(returnSpeed); // Handle when the helix position is past the minimum limit
 		return 1;
-	} else {
-		return 0;
+	}
+	// The helix position is within the limits
+	else {
+		return 0; // Return 0 to indicate that the helix position is within the limits
 	}
 }
 
+// Function to set the command helix position
 void setCommandHelix(int commandHelix) {
-	if (helixPos < commandHelix-10 && limitCheck == 0) {
-		openCVT(openSpeed);
-	} else if (helixPos > commandHelix+10 && limitCheck == 0) {
-		closeCVT(closeSpeed);
-	} else if (limitCheck == 0) {
-		stopCVT();
 
-		if(SerialBT.connected()) {
+	limitCheck = checkLimits(); // Check if the helix position is within the limits
+
+	// Check if the helix position is above the setpoint
+	if (helixPos > (commandHelix + helixMinVariance) && limitCheck == 0) {
+		openCVT(openSpeed); // Open the CVT
+	}
+
+	// Check if the helix position is below the setpoint
+	else if (helixPos < (commandHelix - helixMaxVariance) && limitCheck == 0) {
+		closeCVT(closeSpeed); // Close the CVT
+	}
+	// Check if the helix position is within the acceptable range
+	else if (limitCheck == 0) {
+		stopCVT(); // Stop the CVT
+
+		// Print the message indicating that the helix is at the setpoint to the Bluetooth serial communication if connected
+		if (SerialBT.connected()) {
 			SerialBT.println("Helix at setpoint..,");
 		}
+
+		// Print the message indicating that the helix is at the setpoint to the onboard serial communication
 		Onboard.println("Helix at setpoint..,");
 	}
 }
@@ -443,7 +495,7 @@ void helixRead() {
 	rawHelix = map(Encoder.readAngle(),4095,0,0,4095);
 
 	// Convert the raw helix position to degrees
-	//helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
+	helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -451,7 +503,7 @@ void batRead() {
 
 	int rawBattery = analogRead(batterySensor);
 
-	// Calibrate the reading
+	// Average the reading
 	if(rawBattery > batLowLimit) {
 		updateBatAverage(rawBattery);
 	}
@@ -463,12 +515,15 @@ void updateBatAverage(int newValue) {
 	batIndex = (batIndex + 1) % batSamples;
 	int sum = 0;
 
+	// Calculate the sum of all battery samples
 	for (int i = 0; i < batSamples; i++) {
 		sum += batLogger[i];
 	}
 
+	// Calculate the battery percentage based on the average value
 	batPercent = map((sum / batSamples), batLowLimit, batHighLimit, 0, 99);
 
+	// Ensure that the battery percentage is within the valid range
 	if (batPercent < 0) {
 		batPercent = 0;
 	} else if (batPercent > 100) {
@@ -482,11 +537,11 @@ void brake() {
 
 	// Check if brake state has changed
 	if (brakeState != brakePrevState) {
-		brakeDebounce = millis();
+		brakeTimer = millis();
 	}
 
 	// Check if debounce time has passed
-	if (millis() - brakeDebounce >= 500) {
+	if (millis() - brakeTimer >= brakeDebounce) {
 		// Update brake status based on current state
 		if (brakeState == HIGH) {
 			brakeStatus = 1; // Brake is pressed
@@ -498,7 +553,7 @@ void brake() {
 	brakePrevState = brakeState;
 }
 
-// Function to read onboard data from UART
+// Functions to read data from UART & Bluetooth
 void readOnboardData() {
 	while (Onboard.available() > 0) {
 		char c = Onboard.read();
@@ -525,7 +580,7 @@ void readBluetoothData() {
 	}
 }
 
-// Function to process onboard data received from UART
+// Functions to process data from UART & Bluetooth
 void processOnboardData(String data) {
 	int dataIndex = data.indexOf(':');
 
@@ -601,7 +656,7 @@ void processBluetoothData(String data) {
 	}
 }
 
-// Function to export onboard data to UART
+// Functions to export data to UART & Bluetooth
 void exportOnboardData() {
 	Onboard.print("Forward A:"); // 0-1
 	Onboard.print(digitalRead(motorForwardA));;
