@@ -10,6 +10,9 @@
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
 
+// DEBUG mode
+#define DEBUG
+
 // Serial communication
 HardwareSerial Onboard(0); // UART0
 BluetoothSerial SerialBT; // Bluetooth debug
@@ -36,13 +39,15 @@ AS5600 Encoder; // AS5600 sensor
 #define SDA 21
 #define SCL 22
 
+#define outputLED 2
+
 // Variable declarations ----------------------------------------------------------------
 
 // Battery variables:
 int batLowLimit = 2150;
 int batHighLimit = 3180;
 
-int rawBattery = batLowLimit;
+int rawBattery;
 int batPercent;
 
 const int batSamples = 200;
@@ -69,7 +74,14 @@ int brakeStatus = 0;  // This is (1) when the brake has been pressed for 1/2 sec
 int throttleMin = 2910;
 int throttleMax = 1820;
 
+#ifndef DEBUG
 int rawThrottle = throttleMin;
+#endif
+
+#ifdef DEBUG
+int rawThrottle = 0;
+#endif
+
 int throttlePos = 0;
 
 // Helix variables
@@ -89,11 +101,6 @@ int returnSpeed = 100;
 int limitCheck = 1;
 
 // Motor variables
-int forwardA = 0;
-int forwardB = 0;
-int reverseA = 0;
-int reverseB = 0;
-
 int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = Past Max
 
 // Define PID parameters
@@ -117,8 +124,7 @@ String incomingBluetoothData = "";
 
 // Runtime variables
 unsigned long updateTimer = 0;
-const int updateInterval = 50;
-
+const int updateInterval = 50; // Update interval in milliseconds
 
 
 // Function prototypes --------------------------------------------------------------------
@@ -138,10 +144,11 @@ void updateBatAverage(int newValue);
 void brake();
 void readOnboardData();
 void processOnboardData(String data);
-void exportOnboardData();
+//void exportOnboardData();
+void exportOnboardDiag();
 void readBluetoothData();
 void processBluetoothData(String data);
-void exportBluetoothData();
+void exportBluetoothDiag();
 
 // Functions ---------------------------------------------------------------------------
 
@@ -168,6 +175,10 @@ void setup() {
 	// Setup LEDC for PWM
 	ledcSetup(0, 1000, 8);		//forward
 	ledcSetup(1, 1000, 8);		//reverse
+
+	#ifdef DEBUG
+	ledcSetup(2, 1000, 8);		//debug
+	#endif
 
 	// Set the pin modes for the sensor inputs
 	pinMode(engineSensor, INPUT);
@@ -205,9 +216,12 @@ void loop() {
 	if(launchActive == 0 && pidElapsedTime >= pidInterval) {
 		setCommandRPM();
 
-		exportOnboardData(); // Export onboard data
+		#ifdef DEBUG
+			exportOnboardDiag(); // Export onboard data
+		#endif
+
 		if(SerialBT.connected()) {
-			exportBluetoothData();
+			exportBluetoothDiag();
 		}
 
 		pidPrevTime = millis();
@@ -216,8 +230,11 @@ void loop() {
 	// Launch operation
 	else if (launchActive == 1){
 		setCommandHelix(helixMin);
+		
+		#ifdef DEBUG
+			Onboard.println("Launch Active..,");
+		#endif
 
-		Onboard.println("Launch Active..,");
 		if(SerialBT.connected()) {
 			SerialBT.println("Launch Active..,");
 		}
@@ -229,7 +246,9 @@ void loop() {
 	if (millis() - updateTimer >= updateInterval) {
 		batRead(); // Read battery voltage
 
-		//exportOnboardData(); // Export onboard data
+		#ifndef DEBUG
+			exportOnboardData(); // Export onboard data
+		#endif
 
 		updateTimer = millis();
 	}
@@ -251,9 +270,11 @@ void openCVT(int revSpeed) {
 		ledcWrite(1, revSpeed);
 	}
 
-	// Print the opening message to the onboard serial communication
-	Onboard.print("Opening..,");
-	Onboard.println(revSpeed);
+	#ifdef DEBUG
+		// Print the opening message to the onboard serial communication
+		Onboard.print("Opening..,");
+		Onboard.println(revSpeed);
+	#endif
 
 	// Print the opening message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
@@ -277,9 +298,11 @@ void closeCVT(int fwdSpeed) {
 		ledcWrite(0, fwdSpeed);
 	}
 
-	// Print the closing message to the onboard serial communication
-	Onboard.print("Closing..,");
-	Onboard.println(fwdSpeed);
+	#ifdef DEBUG
+		// Print the closing message to the onboard serial communication
+		Onboard.print("Closing..,");
+		Onboard.println(fwdSpeed);
+	#endif
 
 	// Print the closing message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
@@ -310,8 +333,10 @@ void stopCVT() {
 	// Update the motor state to indicate that it is stopped
 	motorState = 2;
 
-	// Print the stopping message to the onboard serial communication
-	Onboard.print("Stopping..,");
+	#ifdef DEBUG
+		// Print the stopping message to the onboard serial communication
+		Onboard.print("Stopping..,");
+	#endif
 
 	// Print the stopping message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
@@ -321,7 +346,13 @@ void stopCVT() {
 
 // Function to get the command RPM
 void getCommandRPM() {
-	throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+	#ifndef DEBUG
+		throttlePos = map(rawThrottle, throttleMin, throttleMax, 0, 100);
+	#endif
+
+	#ifdef DEBUG
+		throttlePos = map(rawThrottle, 0, 100, 0, 100);
+	#endif
 
 	throttlePos = constrain(throttlePos, 0, 100);
 
@@ -350,18 +381,24 @@ void setCommandRPM(){
   // Compute PID output
   output = Kp * error + Ki * integral + Kd * derivative;
 
-	// Print PID parameters
-	Onboard.print("Error: ");
-	Onboard.print(error);
-	Onboard.print(", ");
+	#ifdef DEBUG
+		// Set the debug LED to the output value
+		ledcWrite(2, abs(output));
+		ledcAttachPin(outputLED, 2);
 
-	Onboard.print("Integral: ");
-	Onboard.print(integral);
-	Onboard.print(", ");
+		// Print PID parameters
+		Onboard.print("Error: ");
+		Onboard.print(error);
+		Onboard.print(", ");
 
-	Onboard.print("Derivative: ");
-	Onboard.print(derivative);
-	Onboard.println(", ");
+		Onboard.print("Integral: ");
+		Onboard.print(integral);
+		Onboard.print(", ");
+
+		Onboard.print("Derivative: ");
+		Onboard.print(derivative);
+		Onboard.println(", ");
+	#endif
 
   // Update previous values for next iteration
   previousError = error;
@@ -383,8 +420,11 @@ void setCommandRPM(){
     // Stop CVT
     stopCVT();
 		
-		Onboard.print("Setpoint reached..,");
-		Onboard.println(output);
+		#ifdef DEBUG
+			Onboard.print("Setpoint reached..,");
+			Onboard.println(output);
+		#endif
+
 		if(SerialBT.connected()) {
 			SerialBT.println("Setpoint reached..,");
 		}
@@ -407,8 +447,10 @@ void pastMin(int speed) {
 		ledcWrite(0, speed);
 	}
 
-	// Print the message indicating that the helix is past the minimum limit to the onboard serial communication
-	Onboard.println("Helix PAST min..,");
+	#ifdef DEBUG
+		// Print the message indicating that the helix is past the minimum limit to the onboard serial communication
+		Onboard.println("Helix PAST min..,");
+	#endif
 
 	// Print the message indicating that the helix is past the minimum limit to the Bluetooth serial communication if connected
 	if (SerialBT.connected()) {
@@ -432,8 +474,10 @@ void pastMax(int speed) {
 		ledcWrite(1, speed);
 	}
 
-	// Print the message indicating that the helix is past the maximum limit to the onboard serial communication
-	Onboard.println("Helix PAST max..,");
+	#ifdef DEBUG
+		// Print the message indicating that the helix is past the maximum limit to the onboard serial communication
+		Onboard.println("Helix PAST max..,");
+	#endif
 
 	// Print the message indicating that the helix is past the maximum limit to the Bluetooth serial communication if connected
 	if (SerialBT.connected()) {
@@ -484,8 +528,10 @@ void setCommandHelix(int commandHelix) {
 			SerialBT.println("Helix at setpoint..,");
 		}
 
-		// Print the message indicating that the helix is at the setpoint to the onboard serial communication
-		Onboard.println("Helix at setpoint..,");
+		#ifdef DEBUG
+			// Print the message indicating that the helix is at the setpoint to the onboard serial communication
+			Onboard.println("Helix at setpoint..,");
+		#endif
 	}
 }
 
@@ -494,8 +540,10 @@ void helixRead() {
 	// Read the helix position from the AS5600 sensor
 	rawHelix = map(Encoder.readAngle(),4095,0,0,4095);
 
-	// Convert the raw helix position to degrees
-	helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
+	#ifndef DEBUG
+		// Convert the raw helix position to degrees
+		helixPos = ((rawHelix * AS5600_RAW_TO_DEGREES) - helixOffset);
+	#endif
 }
 
 // Function to read the battery voltage and calculate the battery percentage
@@ -580,22 +628,14 @@ void readBluetoothData() {
 	}
 }
 
-// Functions to process data from UART & Bluetooth
+// Functions to process data from UART & Bluetooth (FORMAT - "Item:Value")
 void processOnboardData(String data) {
 	int dataIndex = data.indexOf(':');
 
 	if (dataIndex != -1) {
 		String item = data.substring(0, dataIndex);
 
-		if (item == "ForA") {
-			forwardA = data.substring(dataIndex + 1).toInt();
-		} else if (item == "ForB") {
-			forwardB = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RevA"){
-			reverseA = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RevB"){
-			reverseB = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RPM") {
+		if (item == "RPM") {
 			actualRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
@@ -603,6 +643,12 @@ void processOnboardData(String data) {
 			launchActive = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Helix"){
 			helixPos = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Offset"){
+			helixOffset = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Min"){
+			helixMin = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Max"){
+			helixMax = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Return"){
 			returnSpeed = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Kp"){
@@ -621,19 +667,7 @@ void processBluetoothData(String data) {
 	if (dataIndex != -1) {
 		String item = data.substring(0, dataIndex);
 
-		if (item == "ForA") {
-			forwardA = data.substring(dataIndex + 1).toInt();
-		} else if (item == "ForB") {
-			forwardB = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RevA"){
-			reverseA = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RevB"){
-			reverseB = data.substring(dataIndex + 1).toInt();
-		} else if (item == "Min"){
-			helixMin = data.substring(dataIndex + 1).toInt();
-		} else if (item == "Max"){
-			helixMax = data.substring(dataIndex + 1).toInt();
-		} else if (item == "RPM") {
+		if (item == "RPM") {
 			actualRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
@@ -643,6 +677,10 @@ void processBluetoothData(String data) {
 			helixPos = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Offset"){
 			helixOffset = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Min"){
+			helixMin = data.substring(dataIndex + 1).toInt();
+		} else if (item == "Max"){
+			helixMax = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Return"){
 			returnSpeed = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Kp"){
@@ -656,72 +694,80 @@ void processBluetoothData(String data) {
 	}
 }
 
-// Functions to export data to UART & Bluetooth
+// Function to export data to UART
 void exportOnboardData() {
-	Onboard.print("Forward A:"); // 0-1
+
+	Onboard.print("Battery:");
+	Onboard.print(rawBattery);
+	Onboard.print(",");
+
+	Onboard.print("Helix:");
+	Onboard.print(helixPos);
+	Onboard.print(",");
+
+	Onboard.print("Brake:");
+	Onboard.print(brakeStatus);
+	Onboard.println(",");
+}
+
+// Functions to export debugging data to UART & Bluetooth
+void exportOnboardDiag() {
+	Onboard.print("ForA:"); // 0-1
 	Onboard.print(digitalRead(motorForwardA));;
 	Onboard.print(",");
 
-	Onboard.print("Forward B:"); // 0-1
+	Onboard.print("ForB:"); // 0-1
 	Onboard.print(digitalRead(motorForwardB));
 	Onboard.print(",");
 
-	Onboard.print("Reverse A:"); // 0-1
+	Onboard.print("RevA:"); // 0-1
 	Onboard.print(digitalRead(motorReverseA));
 	Onboard.print(",");
 
-	Onboard.print("Reverse B:"); // 0-1
+	Onboard.print("RevB:"); // 0-1
 	Onboard.print(digitalRead(motorReverseB));
 	Onboard.print(",");
 
-/* 	Onboard.print("Battery:"); // 0-1
+ 	Onboard.print("Bat:");
 	Onboard.print(rawBattery);
-	Onboard.print(","); */
+	Onboard.print(",");
 
 	Onboard.print("RPM:");
 	Onboard.print(actualRpm);
 	Onboard.print(",");
 
-	Onboard.print("Commanded:");
+	Onboard.print("Cmd RPM:");
 	Onboard.print(commandRpm);
 	Onboard.print(",");
 
-	Onboard.print("Throttle:"); // 0-1
-	Onboard.print(throttlePos);
+	Onboard.print("Throttle:");
+	Onboard.print(rawThrottle);
 	Onboard.print(",");
 
-/* 	Onboard.print("Raw Throttle:"); // 0-1
-	Onboard.print(rawThrottle);
-	Onboard.print(","); */
-
-	Onboard.print("Helix:"); // 0-1
+	Onboard.print("Helix:");
 	Onboard.print(helixPos);
 	Onboard.print(",");
 
-/* 	Onboard.print("Raw Helix:"); // 0-1
-	Onboard.print(rawHelix);
-	Onboard.print(","); */
-
-	Onboard.print("Return Speed:"); // 0-1
+	Onboard.print("Return Spd:");
 	Onboard.print(returnSpeed);
 	Onboard.print(",");
 
-	Onboard.print("Kp:"); // 0-1
+	Onboard.print("Kp:");
 	Onboard.print(Kp);
 	Onboard.print(",");
 
-	Onboard.print("Ki:"); // 0-1
+	Onboard.print("Ki:");
 	Onboard.print(Ki);
 	Onboard.print(",");
 
-	Onboard.print("Kd:"); // 0-1
+	Onboard.print("Kd:");
 	Onboard.print(Kd);
 	Onboard.println(",");
 }
 
-void exportBluetoothData(){
+void exportBluetoothDiag(){
 	SerialBT.print("ForA:"); // 0-1
-	SerialBT.print(digitalRead(motorForwardA));;
+	SerialBT.print(digitalRead(motorForwardA));
 	SerialBT.print(",");
 
 	SerialBT.print("ForB:"); // 0-1
@@ -736,55 +782,40 @@ void exportBluetoothData(){
 	SerialBT.print(digitalRead(motorReverseB));
 	SerialBT.print(",");
 
-	SerialBT.print("RPM:"); // 0-1
+	SerialBT.print("Bat:");
+	SerialBT.print(rawBattery);
+	SerialBT.print(",");
+
+	SerialBT.print("RPM:");
 	SerialBT.print(actualRpm);
 	SerialBT.print(",");
 
-	SerialBT.print("Commanded:");
+	SerialBT.print("Cmd RPM:");
 	SerialBT.print(commandRpm);
 	SerialBT.print(",");
 
-	SerialBT.print("Throttle:"); // 0-1
+	SerialBT.print("Throttle:");
 	SerialBT.print(throttlePos);
 	SerialBT.print(",");
 
-	SerialBT.print("Helix:"); // 0-1
+	SerialBT.print("Helix:");
 	SerialBT.print(helixPos);
 	SerialBT.print(",");
 
-/* 	SerialBT.print("Raw Helix:"); // 0-1
-	SerialBT.print(rawHelix);
-	SerialBT.print(","); */
-
-/* 	SerialBT.print("Helix min:"); // 0-1
-	SerialBT.print(helixMin);
-	SerialBT.print(",");
-
-	SerialBT.print("Helix max:"); // 0-1
-	SerialBT.print(helixMax);
-	SerialBT.print(",");
-
-	SerialBT.print("Offset:"); // 0-1
-	SerialBT.print(helixOffset);
-	SerialBT.print(","); */
-
-	SerialBT.print("Launch:"); // 0-1
-	SerialBT.print(launchActive);
-	SerialBT.println(",");
-
-	SerialBT.print("Return Speed:"); // 0-1
+	SerialBT.print("Return Spd:");
 	SerialBT.print(returnSpeed);
 	SerialBT.print(",");
 
-	SerialBT.print("Kp:"); // 0-1
+	SerialBT.print("Kp:");
 	SerialBT.print(Kp);
 	SerialBT.print(",");
 
-	SerialBT.print("Ki:"); // 0-1
+	SerialBT.print("Ki:");
 	SerialBT.print(Ki);
 	SerialBT.print(",");
 
-	SerialBT.print("Kd:"); // 0-1
+	SerialBT.print("Kd:");
 	SerialBT.print(Kd);
 	SerialBT.println(",");
+
 }

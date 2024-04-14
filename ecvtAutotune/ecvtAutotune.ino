@@ -116,8 +116,6 @@ int motorState = 2;	// 0 = Forward, 1 = Reverse, 2 = Stopped, 3 = Past Min, 4 = 
 #include <QuickPID.h>
 
 const uint32_t sampleTimeUs = 10000; // 10ms
-const byte inputPin = 0;
-const byte outputPin = 3;
 const int outputMax = 255;
 const int outputMin = -255;
 

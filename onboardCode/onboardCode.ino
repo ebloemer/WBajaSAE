@@ -498,14 +498,8 @@ void processEcvtData(String data) {
 
     if (item == "Brake"){
       brakeStatus = data.substring(dataIndex + 1).toInt();
-    // } else if(item == "Launch"){
-    //   launchStatus = data.substring(dataIndex + 1).toInt();
     } else if(item == "Battery"){
       ecvtBat = data.substring(dataIndex + 1).toInt();
-    // } else if(item == "RPM"){
-    //   rpm = data.substring(dataIndex + 1).toInt();
-    // } else if(item == "Throttle"){
-    //   throttlePos = data.substring(dataIndex + 1).toInt();
     } else if(item == "Helix"){
       helixPos = data.substring(dataIndex + 1).toInt();
     }
@@ -518,7 +512,7 @@ void processPhoneData(String data) {
   if (dataIndex != -1) {
     String item = data.substring(0, dataIndex);
 
-    if (item == "Confirmed"){
+    if (item == "Confirm"){
       acknowledged = data.substring(dataIndex + 1).toInt();
     }
   }
@@ -581,10 +575,6 @@ void exportPhoneData() {
 
   // Function to export data to eCVT
 void exportEcvtData() {
-  Ecvt.print("Battery:");
-  Ecvt.print(batPercent);
-  Ecvt.print(",");
-  
   Ecvt.print("Throttle:");
   Ecvt.print(rawRightFront);
   Ecvt.print(",");
