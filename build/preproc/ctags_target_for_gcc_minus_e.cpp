@@ -14,6 +14,7 @@
 // DEBUG mode
 
 
+
 // Serial communication
 HardwareSerial Onboard(0); // UART0
 BluetoothSerial SerialBT; // Bluetooth debug
@@ -196,9 +197,9 @@ void setup() {
 // Loop function
 void loop() {
 
- delay(100);
 
- limitCheck = checkLimits(); //purely incase I forget in any scenario
+  delay(100), // Delay for 100 milliseconds
+
 
  // Read serial data
  readOnboardData(); // Read onboard data
@@ -392,21 +393,21 @@ void setCommandRPM(){
   output = ((output)<(-255)?(-255):((output)>(255)?(255):(output)));
 
 
- // Set the debug LED to the output value
-    if(ledcRead(2) != abs(output)){
-      ledcWrite(2, abs(output));
+  // Set the debug LED to the output value
+    if(ledcRead(2) != (abs(output)/4)){
+      ledcWrite(2, (abs(output)/4));
     }
+
+
 
   // Print PID parameters
   Onboard.print("Error: ");
   Onboard.print(error);
-  Onboard.print(", ");
 
-  Onboard.print("Integral: ");
+  Onboard.print(" Integral: ");
   Onboard.print(integral);
-  Onboard.print(", ");
 
-  Onboard.print("Derivative: ");
+  Onboard.print(" Derivative: ");
   Onboard.print(derivative);
   Onboard.println(", ");
 
@@ -524,6 +525,7 @@ void setCommandHelix(int commandHelix) {
  else if (helixPos < (commandHelix - helixMaxVariance) && limitCheck == 0) {
   closeCVT(closeSpeed); // Close the CVT
  }
+
  // Check if the helix position is within the acceptable range
  else if (limitCheck == 0) {
   stopCVT(); // Stop the CVT
@@ -717,20 +719,12 @@ void exportOnboardData() {
 
 // Functions to export debugging data to UART & Bluetooth
 void exportOnboardDiag() {
- Onboard.print("ForA:"); // 0-1
+ Onboard.print("Fwd:"); // 0-1
  Onboard.print(digitalRead(32 /* forward + mosfet*/));;
  Onboard.print(",");
 
- Onboard.print("ForB:"); // 0-1
- Onboard.print(digitalRead(26 /* forward - mosfet*/));
- Onboard.print(",");
-
- Onboard.print("RevA:"); // 0-1
+ Onboard.print("Rev:"); // 0-1
  Onboard.print(digitalRead(25 /* reverse + mosfet*/));
- Onboard.print(",");
-
- Onboard.print("RevB:"); // 0-1
- Onboard.print(digitalRead(33 /* reverse - mosfet*/));
  Onboard.print(",");
 
   Onboard.print("Bat:");
@@ -771,20 +765,12 @@ void exportOnboardDiag() {
 }
 
 void exportBluetoothDiag(){
- SerialBT.print("ForA:"); // 0-1
+ SerialBT.print("Fwd:"); // 0-1
  SerialBT.print(digitalRead(32 /* forward + mosfet*/));
  SerialBT.print(",");
 
- SerialBT.print("ForB:"); // 0-1
- SerialBT.print(digitalRead(26 /* forward - mosfet*/));
- SerialBT.print(",");
-
- SerialBT.print("RevA:"); // 0-1
+ SerialBT.print("Rev:"); // 0-1
  SerialBT.print(digitalRead(25 /* reverse + mosfet*/));
- SerialBT.print(",");
-
- SerialBT.print("RevB:"); // 0-1
- SerialBT.print(digitalRead(33 /* reverse - mosfet*/));
  SerialBT.print(",");
 
  SerialBT.print("Bat:");

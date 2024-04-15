@@ -196,7 +196,9 @@ void setup() {
 // Loop function
 void loop() {
 
-	limitCheck = checkLimits();		//purely incase I forget in any scenario
+	#ifdef DEBUG
+		delay(100), // Delay for 100 milliseconds
+	#endif
 
 	// Read serial data
 	readOnboardData(); // Read onboard data
@@ -391,8 +393,8 @@ void setCommandRPM(){
 
 	#ifdef LED
 		// Set the debug LED to the output value
-    if(ledcRead(2) != abs(output)){
-      ledcWrite(2, abs(output));
+    if(ledcRead(2) != (abs(output)/5)){
+      ledcWrite(2, (abs(output)/5));
     }
 	#endif
 
@@ -522,6 +524,7 @@ void setCommandHelix(int commandHelix) {
 	else if (helixPos < (commandHelix - helixMaxVariance) && limitCheck == 0) {
 		closeCVT(closeSpeed); // Close the CVT
 	}
+
 	// Check if the helix position is within the acceptable range
 	else if (limitCheck == 0) {
 		stopCVT(); // Stop the CVT
@@ -715,20 +718,12 @@ void exportOnboardData() {
 
 // Functions to export debugging data to UART & Bluetooth
 void exportOnboardDiag() {
-	Onboard.print("ForA:"); // 0-1
+	Onboard.print("Fwd:"); // 0-1
 	Onboard.print(digitalRead(motorForwardA));;
 	Onboard.print(",");
 
-	Onboard.print("ForB:"); // 0-1
-	Onboard.print(digitalRead(motorForwardB));
-	Onboard.print(",");
-
-	Onboard.print("RevA:"); // 0-1
+	Onboard.print("Rev:"); // 0-1
 	Onboard.print(digitalRead(motorReverseA));
-	Onboard.print(",");
-
-	Onboard.print("RevB:"); // 0-1
-	Onboard.print(digitalRead(motorReverseB));
 	Onboard.print(",");
 
  	Onboard.print("Bat:");
@@ -769,20 +764,12 @@ void exportOnboardDiag() {
 }
 
 void exportBluetoothDiag(){
-	SerialBT.print("ForA:"); // 0-1
+	SerialBT.print("Fwd:"); // 0-1
 	SerialBT.print(digitalRead(motorForwardA));
 	SerialBT.print(",");
 
-	SerialBT.print("ForB:"); // 0-1
-	SerialBT.print(digitalRead(motorForwardB));
-	SerialBT.print(",");
-
-	SerialBT.print("RevA:"); // 0-1
+	SerialBT.print("Rev:"); // 0-1
 	SerialBT.print(digitalRead(motorReverseA));
-	SerialBT.print(",");
-
-	SerialBT.print("RevB:"); // 0-1
-	SerialBT.print(digitalRead(motorReverseB));
 	SerialBT.print(",");
 
 	SerialBT.print("Bat:");

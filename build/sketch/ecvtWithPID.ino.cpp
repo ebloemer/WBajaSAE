@@ -14,6 +14,7 @@
 
 // DEBUG mode
 #define DEBUG
+#define LED
 
 // Serial communication
 HardwareSerial Onboard(0); // UART0
@@ -154,13 +155,13 @@ void exportBluetoothDiag();
 
 // Functions ---------------------------------------------------------------------------
 
-#line 155 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 156 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void setup();
-#line 196 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 197 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void loop();
-#line 702 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 704 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void exportOnboardData();
-#line 155 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 156 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void setup() {
 	// Initialize the Onboard serial communication at a baud rate of 115200
 	Onboard.begin(115200, SERIAL_8N1, linkRx, linkTx);
@@ -185,7 +186,7 @@ void setup() {
 	ledcSetup(0, 1000, 8);		//forward
 	ledcSetup(1, 1000, 8);		//reverse
 
-	#ifdef DEBUG
+	#ifdef LED
 		ledcSetup(2, 1000, 8);		//debug
 		ledcAttachPin(outputLED, 2);
 	#endif
@@ -204,9 +205,9 @@ void setup() {
 // Loop function
 void loop() {
 
-	delay(100);
-
-	limitCheck = checkLimits();		//purely incase I forget in any scenario
+	#ifdef DEBUG
+		delay(100), // Delay for 100 milliseconds
+	#endif
 
 	// Read serial data
 	readOnboardData(); // Read onboard data
@@ -399,22 +400,22 @@ void setCommandRPM(){
   // Ensure output is within acceptable bounds (e.g., for PWM control)
   output = constrain(output, -255, 255);
 
-	#ifdef DEBUG
-	// Set the debug LED to the output value
-    if(ledcRead(2) != abs(output)){
-      ledcWrite(2, abs(output));
+	#ifdef LED
+		// Set the debug LED to the output value
+    if(ledcRead(2) != (abs(output)/4)){
+      ledcWrite(2, (abs(output)/4));
     }
+	#endif
 
+	#ifdef DEBUG
 		// Print PID parameters
 		Onboard.print("Error: ");
 		Onboard.print(error);
-		Onboard.print(", ");
 
-		Onboard.print("Integral: ");
+		Onboard.print(" Integral: ");
 		Onboard.print(integral);
-		Onboard.print(", ");
 
-		Onboard.print("Derivative: ");
+		Onboard.print(" Derivative: ");
 		Onboard.print(derivative);
 		Onboard.println(", ");
 	#endif
@@ -532,6 +533,7 @@ void setCommandHelix(int commandHelix) {
 	else if (helixPos < (commandHelix - helixMaxVariance) && limitCheck == 0) {
 		closeCVT(closeSpeed); // Close the CVT
 	}
+
 	// Check if the helix position is within the acceptable range
 	else if (limitCheck == 0) {
 		stopCVT(); // Stop the CVT
@@ -725,20 +727,12 @@ void exportOnboardData() {
 
 // Functions to export debugging data to UART & Bluetooth
 void exportOnboardDiag() {
-	Onboard.print("ForA:"); // 0-1
+	Onboard.print("Fwd:"); // 0-1
 	Onboard.print(digitalRead(motorForwardA));;
 	Onboard.print(",");
 
-	Onboard.print("ForB:"); // 0-1
-	Onboard.print(digitalRead(motorForwardB));
-	Onboard.print(",");
-
-	Onboard.print("RevA:"); // 0-1
+	Onboard.print("Rev:"); // 0-1
 	Onboard.print(digitalRead(motorReverseA));
-	Onboard.print(",");
-
-	Onboard.print("RevB:"); // 0-1
-	Onboard.print(digitalRead(motorReverseB));
 	Onboard.print(",");
 
  	Onboard.print("Bat:");
@@ -779,20 +773,12 @@ void exportOnboardDiag() {
 }
 
 void exportBluetoothDiag(){
-	SerialBT.print("ForA:"); // 0-1
+	SerialBT.print("Fwd:"); // 0-1
 	SerialBT.print(digitalRead(motorForwardA));
 	SerialBT.print(",");
 
-	SerialBT.print("ForB:"); // 0-1
-	SerialBT.print(digitalRead(motorForwardB));
-	SerialBT.print(",");
-
-	SerialBT.print("RevA:"); // 0-1
+	SerialBT.print("Rev:"); // 0-1
 	SerialBT.print(digitalRead(motorReverseA));
-	SerialBT.print(",");
-
-	SerialBT.print("RevB:"); // 0-1
-	SerialBT.print(digitalRead(motorReverseB));
 	SerialBT.print(",");
 
 	SerialBT.print("Bat:");
