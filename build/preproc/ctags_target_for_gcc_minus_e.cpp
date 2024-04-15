@@ -109,7 +109,7 @@ double Kp = 0.1; // Proportional gain
 double Ki = 0.1; // Integral gain
 double Kd = 0.01; // Derivative gain
 double Ti = 100; // Integral time constant
-double Td = 1000; // Derivative time constant
+double Td = 0; // Derivative time constant
 
 double previousError = 0;
 double integral = 0;
@@ -178,7 +178,8 @@ void setup() {
  ledcSetup(1, 1000, 8); //reverse
 
 
- ledcSetup(2, 1000, 8); //debug
+  ledcSetup(2, 1000, 8); //debug
+  ledcAttachPin(2, 2);
 
 
  // Set the pin modes for the sensor inputs
@@ -194,6 +195,8 @@ void setup() {
 
 // Loop function
 void loop() {
+
+ delay(100);
 
  limitCheck = checkLimits(); //purely incase I forget in any scenario
 
@@ -374,18 +377,25 @@ void setCommandRPM(){
   double error = commandRpm - actualRpm;
 
   // Calculate integral term (approximate integral using trapezoidal rule)
-  integral += (error + previousError) * pidElapsedTime / Ti; // Convert milliseconds to seconds
+  integral += (error + previousError) * pidElapsedTime / Ti;
 
   // Calculate derivative term
-  double derivative = (error - previousError) / (pidElapsedTime / Td); // Convert milliseconds to seconds
+  double derivative = (error - previousError) / (pidElapsedTime / Td);
 
   // Compute PID output
   output = Kp * error + Ki * integral + Kd * derivative;
 
+  // Update previous values for next iteration
+  previousError = error;
 
-  // Set the debug LED to the output value
-  ledcWrite(2, abs(output));
-  ledcAttachPin(2, 2);
+  // Ensure output is within acceptable bounds (e.g., for PWM control)
+  output = ((output)<(-255)?(-255):((output)>(255)?(255):(output)));
+
+
+ // Set the debug LED to the output value
+    if(ledcRead(2) != abs(output)){
+      ledcWrite(2, abs(output));
+    }
 
   // Print PID parameters
   Onboard.print("Error: ");
@@ -400,12 +410,6 @@ void setCommandRPM(){
   Onboard.print(derivative);
   Onboard.println(", ");
 
-
-  // Update previous values for next iteration
-  previousError = error;
-
-  // Ensure output is within acceptable bounds (e.g., for PWM control)
-  output = ((output)<(-255)?(-255):((output)>(255)?(255):(output)));
 
  // Read the helix position
   limitCheck = checkLimits();

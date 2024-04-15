@@ -110,7 +110,7 @@ double Kp = 0.1;  // Proportional gain
 double Ki = 0.1;  // Integral gain
 double Kd = 0.01;  	// Derivative gain
 double Ti = 100;	// Integral time constant
-double Td = 1000;	// Derivative time constant
+double Td = 0;	// Derivative time constant
 
 double previousError = 0;
 double integral = 0;
@@ -156,9 +156,9 @@ void exportBluetoothDiag();
 
 #line 155 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void setup();
-#line 195 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 196 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void loop();
-#line 698 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+#line 702 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void exportOnboardData();
 #line 155 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
 void setup() {
@@ -186,7 +186,8 @@ void setup() {
 	ledcSetup(1, 1000, 8);		//reverse
 
 	#ifdef DEBUG
-	ledcSetup(2, 1000, 8);		//debug
+		ledcSetup(2, 1000, 8);		//debug
+		ledcAttachPin(outputLED, 2);
 	#endif
 
 	// Set the pin modes for the sensor inputs
@@ -202,6 +203,8 @@ void setup() {
 
 // Loop function
 void loop() {
+
+	delay(100);
 
 	limitCheck = checkLimits();		//purely incase I forget in any scenario
 
@@ -382,18 +385,25 @@ void setCommandRPM(){
   double error = commandRpm - actualRpm;
 
   // Calculate integral term (approximate integral using trapezoidal rule)
-  integral += (error + previousError) * pidElapsedTime / Ti;  // Convert milliseconds to seconds
+  integral += (error + previousError) * pidElapsedTime / Ti;
 
   // Calculate derivative term
-  double derivative = (error - previousError) / (pidElapsedTime / Td);  // Convert milliseconds to seconds
+  double derivative = (error - previousError) / (pidElapsedTime / Td);
 
   // Compute PID output
   output = Kp * error + Ki * integral + Kd * derivative;
 
+  // Update previous values for next iteration
+  previousError = error;
+
+  // Ensure output is within acceptable bounds (e.g., for PWM control)
+  output = constrain(output, -255, 255);
+
 	#ifdef DEBUG
-		// Set the debug LED to the output value
-		ledcWrite(2, abs(output));
-		ledcAttachPin(outputLED, 2);
+	// Set the debug LED to the output value
+    if(ledcRead(2) != abs(output)){
+      ledcWrite(2, abs(output));
+    }
 
 		// Print PID parameters
 		Onboard.print("Error: ");
@@ -408,12 +418,6 @@ void setCommandRPM(){
 		Onboard.print(derivative);
 		Onboard.println(", ");
 	#endif
-
-  // Update previous values for next iteration
-  previousError = error;
-
-  // Ensure output is within acceptable bounds (e.g., for PWM control)
-  output = constrain(output, -255, 255);
 
 	// Read the helix position
   limitCheck = checkLimits();
