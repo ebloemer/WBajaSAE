@@ -11,7 +11,7 @@
 #endif
 
 // DEBUG mode
-#define DEBUG
+// #define DEBUG
 #define LED
 
 // Serial communication
@@ -90,10 +90,10 @@ float rawHelix = 0;
 float helixPos = 0;
 int helixMax = 47;
 int helixMin = 0;
-float helixOffset = 166;
+float helixOffset = 162;
 
-int helixMinVariance = 5;
-int helixMaxVariance = 5;
+int helixMinVariance = 2;
+int helixMaxVariance = 2;
 
 int closeSpeed = 150;
 int openSpeed = 150;
@@ -145,7 +145,7 @@ void updateBatAverage(int newValue);
 void brake();
 void readOnboardData();
 void processOnboardData(String data);
-//void exportOnboardData();
+void exportOnboardData();
 void exportOnboardDiag();
 void readBluetoothData();
 void processBluetoothData(String data);
@@ -283,6 +283,7 @@ void openCVT(int revSpeed) {
 	// Print the opening message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
 		SerialBT.println("Opening..,");
+		SerialBT.println(revSpeed);
 	}
 }
 
@@ -311,6 +312,7 @@ void closeCVT(int fwdSpeed) {
 	// Print the closing message to the Bluetooth serial communication if connected
 	if(SerialBT.connected()) {
 		SerialBT.println("Closing..,");
+		SerialBT.println(fwdSpeed);
 	}
 }
 
@@ -411,6 +413,19 @@ void setCommandRPM(){
 		Onboard.println(", ");
 	#endif
 
+	if(SerialBT.connected()) {
+		// Print PID parameters
+		SerialBT.print("Error: ");
+		SerialBT.print(error);
+
+		SerialBT.print(" Integral: ");
+		SerialBT.print(integral);
+
+		SerialBT.print(" Derivative: ");
+		SerialBT.print(derivative);
+		SerialBT.println(", ");
+	}
+
 	// Read the helix position
   limitCheck = checkLimits();
 
@@ -432,6 +447,7 @@ void setCommandRPM(){
 
 		if(SerialBT.connected()) {
 			SerialBT.println("Setpoint reached..,");
+			SerialBT.println(output);
 		}
   }
 }
@@ -451,6 +467,13 @@ void pastMin(int speed) {
 	if (ledcRead(0) != speed) {
 		ledcWrite(0, speed);
 	}
+
+	#ifdef LED
+		// Set the debug LED to the output value
+    if(ledcRead(2) != (abs(speed)/5)){
+      ledcWrite(2, (abs(speed)/5));
+    }
+	#endif
 
 	#ifdef DEBUG
 		// Print the message indicating that the helix is past the minimum limit to the onboard serial communication
@@ -478,6 +501,13 @@ void pastMax(int speed) {
 	if (ledcRead(1) != speed) {
 		ledcWrite(1, speed);
 	}
+
+	#ifdef LED
+		// Set the debug LED to the output value
+    if(ledcRead(2) != (abs(speed)/5)){
+      ledcWrite(2, (abs(speed)/5));
+    }
+	#endif
 
 	#ifdef DEBUG
 		// Print the message indicating that the helix is past the maximum limit to the onboard serial communication
@@ -786,6 +816,10 @@ void exportBluetoothDiag(){
 
 	SerialBT.print("Throttle:");
 	SerialBT.print(throttlePos);
+	SerialBT.print(",");
+
+	SerialBT.print("Raw Thr:");
+	SerialBT.print(rawThrottle);
 	SerialBT.print(",");
 
 	SerialBT.print("Helix:");

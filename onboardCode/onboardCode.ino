@@ -1,5 +1,3 @@
-#include <AS5600.h>
-
 
 /*
     Name:       onboardCode.ino
@@ -228,11 +226,11 @@ void loop() {
   reverseCheck();
   lapButtonCheck();
   muteButtonCheck();
+  shockRead();
 
   // Check if it's time to export data to phone
   if (millis() - phoneExportTimer >= phoneExportInterval) {
     // Run non-time critical functions
-    shockRead();
 
     // Export data to phone
     exportPhoneData();
@@ -243,7 +241,6 @@ void loop() {
   // Check if it's time to export data to eCVT
   if (millis() - ecvtExportTimer >= ecvtExportInterval) {
     batRead();
-    shockRead();
     
     // Export data to eCVT
     exportEcvtData();

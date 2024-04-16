@@ -1,15 +1,11 @@
-# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino"
+# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtController\\ecvtController.ino"
 // This file contains the code for the ecvtCode project.
 
-# 4 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino" 2
-# 5 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino" 2
-# 6 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino" 2
-# 7 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtWithPID\\ecvtWithPID.ino" 2
-
-//error codes
-
-
-
+// Libraries
+# 5 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtController\\ecvtController.ino" 2
+# 6 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtController\\ecvtController.ino" 2
+# 7 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtController\\ecvtController.ino" 2
+# 8 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\ecvtController\\ecvtController.ino" 2
 
 // DEBUG mode
 
@@ -91,10 +87,10 @@ float rawHelix = 0;
 float helixPos = 0;
 int helixMax = 47;
 int helixMin = 0;
-float helixOffset = 166;
+float helixOffset = 162;
 
-int helixMinVariance = 5;
-int helixMaxVariance = 5;
+int helixMinVariance = 2;
+int helixMaxVariance = 2;
 
 int closeSpeed = 150;
 int openSpeed = 150;
@@ -146,7 +142,7 @@ void updateBatAverage(int newValue);
 void brake();
 void readOnboardData();
 void processOnboardData(String data);
-//void exportOnboardData();
+void exportOnboardData();
 void exportOnboardDiag();
 void readBluetoothData();
 void processBluetoothData(String data);
@@ -171,16 +167,16 @@ void setup() {
  }
 
  // Set the pin modes for the motor control pins
- pinMode(32 /* forward + mosfet*/, 0x03);
- pinMode(25 /* reverse + mosfet*/, 0x03);
+ pinMode(32, 0x03);
+ pinMode(25, 0x03);
+  pinMode(26, 0x03);
 
  // Setup LEDC for PWM
- ledcSetup(0, 1000, 8); //forward
- ledcSetup(1, 1000, 8); //reverse
+ ledcSetup(0, 1000, 8); //motor speed
 
 
-  ledcSetup(2, 1000, 8); //debug
-  ledcAttachPin(2, 2);
+  ledcSetup(1, 1000, 8); //debug
+  ledcAttachPin(2, 1);
 
 
  // Set the pin modes for the sensor inputs
@@ -189,6 +185,11 @@ void setup() {
 
  // Set the pin modes for the brake input and launch button
  pinMode(27, 0x01);
+
+  // Enable the motor controller
+  digitalWrite(25, 0x0);
+  digitalWrite(26, 0x0);
+  digitalWrite(32, 0x1);
 
  // Ensure the motor is stopped
  stopCVT();
@@ -264,15 +265,15 @@ void openCVT(int revSpeed) {
  // Check if the motor is already in the reverse state
  if(motorState != 1) {
   stopCVT();
-  digitalWrite(25 /* reverse + mosfet*/, 0x1); // Turn on the reverse + mosfet
-  ledcAttachPin(33 /* reverse - mosfet*/, 1); // Attach the reverse - mosfet to LEDC channel 1
-  ledcWrite(1, revSpeed); // Set the speed of the reverse - mosfet
+  ledcWrite(0, revSpeed);
+  ledcAttachPin(33, 0);
+  digitalWrite(26, 0x1);
   motorState = 1;
  }
 
- // Check if the speed of the reverse - mosfet needs to be updated
- if(ledcRead(1) != revSpeed) {
-  ledcWrite(1, revSpeed);
+ // Check if the speed changed
+ if(ledcRead(0) != revSpeed) {
+  ledcWrite(0, revSpeed);
  }
 
 
@@ -284,6 +285,7 @@ void openCVT(int revSpeed) {
  // Print the opening message to the Bluetooth serial communication if connected
  if(SerialBT.connected()) {
   SerialBT.println("Opening..,");
+  SerialBT.println(revSpeed);
  }
 }
 
@@ -292,13 +294,13 @@ void closeCVT(int fwdSpeed) {
  // Check if the motor is already in the forward state
  if(motorState != 0) {
   stopCVT();
-  digitalWrite(32 /* forward + mosfet*/, 0x1); // Turn on the forward + mosfet
-  ledcAttachPin(26 /* forward - mosfet*/, 0); // Attach the forward - mosfet to LEDC channel 0
-  ledcWrite(0, fwdSpeed); // Set the speed of the forward - mosfet
+  ledcWrite(0, fwdSpeed);
+  ledcAttachPin(33, 0);
+  digitalWrite(25, 0x1);
   motorState = 0;
  }
 
- // Check if the speed of the forward - mosfet needs to be updated
+ // Check if the speed changed
  if(ledcRead(0) != fwdSpeed) {
   ledcWrite(0, fwdSpeed);
  }
@@ -312,6 +314,7 @@ void closeCVT(int fwdSpeed) {
  // Print the closing message to the Bluetooth serial communication if connected
  if(SerialBT.connected()) {
   SerialBT.println("Closing..,");
+  SerialBT.println(fwdSpeed);
  }
 }
 
@@ -320,17 +323,20 @@ void stopCVT() {
  // Read the helix position
  helixRead();
 
- // Turn off the forward and reverse + mosfets
- digitalWrite(32 /* forward + mosfet*/, 0x0);
- digitalWrite(25 /* reverse + mosfet*/, 0x0);
-
- // Detach the forward and reverse - mosfets from LEDC channels
- ledcDetachPin(26 /* forward - mosfet*/);
- ledcDetachPin(33 /* reverse - mosfet*/);
-
- // Set the speed of the LEDC channels to idle
+ // Set the speed of the LEDC channel to idle
  ledcWrite(0, 0);
- ledcWrite(1, 0);
+
+ // Turn off motor controller
+ digitalWrite(25, 0x0);
+ digitalWrite(26, 0x0);
+
+ // Detach the speed pin
+ ledcDetachPin(33);
+
+  // Detach the debug LED
+
+   ledcWrite(1, 0);
+
 
  // Delay for 1 millisecond to ensure the motor is disconnected
  delay(1);
@@ -394,8 +400,8 @@ void setCommandRPM(){
 
 
   // Set the debug LED to the output value
-    if(ledcRead(2) != (abs(output)/5)){
-      ledcWrite(2, (abs(output)/5));
+    if(ledcRead(1) != (abs(output)/5)){
+      ledcWrite(1, (abs(output)/5));
     }
 
 
@@ -411,6 +417,19 @@ void setCommandRPM(){
   Onboard.print(derivative);
   Onboard.println(", ");
 
+
+ if(SerialBT.connected()) {
+  // Print PID parameters
+  SerialBT.print("Error: ");
+  SerialBT.print(error);
+
+  SerialBT.print(" Integral: ");
+  SerialBT.print(integral);
+
+  SerialBT.print(" Derivative: ");
+  SerialBT.print(derivative);
+  SerialBT.println(", ");
+ }
 
  // Read the helix position
   limitCheck = checkLimits();
@@ -433,6 +452,7 @@ void setCommandRPM(){
 
   if(SerialBT.connected()) {
    SerialBT.println("Setpoint reached..,");
+   SerialBT.println(output);
   }
   }
 }
@@ -442,16 +462,23 @@ void pastMin(int speed) {
  // Check if the motor state is not already indicating past the minimum limit
  if (motorState != 3) {
   stopCVT();
-  digitalWrite(32 /* forward + mosfet*/, 0x1); // Turn on the forward + mosfet
-  ledcAttachPin(26 /* forward - mosfet*/, 0); // Attach the forward - mosfet to LEDC channel 0
-  ledcWrite(0, speed); // Set the speed of the forward - mosfet
+  ledcWrite(0, speed);
+  ledcAttachPin(33, 0);
+  digitalWrite(25, 0x1);
   motorState = 3;
  }
 
- // Check if the speed of the forward - mosfet needs to be updated
+ // Check if the speed changed
  if (ledcRead(0) != speed) {
   ledcWrite(0, speed);
  }
+
+
+  // Set the debug LED to the output value
+    if(ledcRead(1) != (abs(speed)/5)){
+      ledcWrite(1, (abs(speed)/5));
+    }
+
 
 
   // Print the message indicating that the helix is past the minimum limit to the onboard serial communication
@@ -469,16 +496,23 @@ void pastMax(int speed) {
  // Check if the motor state is not already indicating past the maximum limit
  if (motorState != 4) {
   stopCVT();
-  digitalWrite(25 /* reverse + mosfet*/, 0x1); // Turn on the reverse + mosfet
-  ledcAttachPin(33 /* reverse - mosfet*/, 1); // Attach the reverse - mosfet to LEDC channel 1
-  ledcWrite(1, speed); // Set the speed of the reverse - mosfet
+  ledcWrite(0, speed);
+  ledcAttachPin(33, 0);
+    digitalWrite(26, 0x1);
   motorState = 4;
  }
 
  // Check if the speed of the reverse - mosfet needs to be updated
- if (ledcRead(1) != speed) {
-  ledcWrite(1, speed);
+ if (ledcRead(0) != speed) {
+  ledcWrite(0, speed);
  }
+
+
+  // Set the debug LED to the output value
+    if(ledcRead(1) != (abs(speed)/5)){
+      ledcWrite(1, (abs(speed)/5));
+    }
+
 
 
   // Print the message indicating that the helix is past the maximum limit to the onboard serial communication
@@ -720,11 +754,11 @@ void exportOnboardData() {
 // Functions to export debugging data to UART & Bluetooth
 void exportOnboardDiag() {
  Onboard.print("Fwd:"); // 0-1
- Onboard.print(digitalRead(32 /* forward + mosfet*/));;
+ Onboard.print(digitalRead(25));;
  Onboard.print(",");
 
  Onboard.print("Rev:"); // 0-1
- Onboard.print(digitalRead(25 /* reverse + mosfet*/));
+ Onboard.print(digitalRead(26));
  Onboard.print(",");
 
   Onboard.print("Bat:");
@@ -766,11 +800,11 @@ void exportOnboardDiag() {
 
 void exportBluetoothDiag(){
  SerialBT.print("Fwd:"); // 0-1
- SerialBT.print(digitalRead(32 /* forward + mosfet*/));
+ SerialBT.print(digitalRead(25));
  SerialBT.print(",");
 
  SerialBT.print("Rev:"); // 0-1
- SerialBT.print(digitalRead(25 /* reverse + mosfet*/));
+ SerialBT.print(digitalRead(26));
  SerialBT.print(",");
 
  SerialBT.print("Bat:");
@@ -787,6 +821,10 @@ void exportBluetoothDiag(){
 
  SerialBT.print("Throttle:");
  SerialBT.print(throttlePos);
+ SerialBT.print(",");
+
+ SerialBT.print("Raw Thr:");
+ SerialBT.print(rawThrottle);
  SerialBT.print(",");
 
  SerialBT.print("Helix:");
