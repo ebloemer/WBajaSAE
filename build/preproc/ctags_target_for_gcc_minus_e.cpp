@@ -394,8 +394,8 @@ void setCommandRPM(){
 
 
   // Set the debug LED to the output value
-    if(ledcRead(2) != (abs(output)/4)){
-      ledcWrite(2, (abs(output)/4));
+    if(ledcRead(2) != (abs(output)/5)){
+      ledcWrite(2, (abs(output)/5));
     }
 
 
