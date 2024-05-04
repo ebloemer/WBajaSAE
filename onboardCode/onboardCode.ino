@@ -209,7 +209,7 @@ void setup() {
   digitalWrite(varPower, OFF);
   digitalWrite(varSignal, LOW);
   digitalWrite(shockPower, ON);
-  digitalWrite(phonePower, OFF);
+  digitalWrite(phonePower, ON);
 
   // Attach interrupts
   attachInterrupt(digitalPinToInterrupt(engineSensor), RPMRead, FALLING);
