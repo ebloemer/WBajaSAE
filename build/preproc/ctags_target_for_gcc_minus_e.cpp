@@ -1,559 +1,419 @@
-# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\onboardCode\\onboardCode.ino"
+# 1 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\dctProtoCode\\dctProtoCode.ino"
+// Includes
+# 3 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\dctProtoCode\\dctProtoCode.ino" 2
 
-/*
+// Define serial communication
+HardwareSerial Onboard(0); // UART0
+String incomingOnboardData = "";
 
-    Name:       onboardCode.ino
+// OUTPUT PIN ASSIGNMENTS
 
-    Created:	2/11/2024 12:08:47 AM
 
-    Author:     WesternBajaSAE
 
-*/
-# 8 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\onboardCode\\onboardCode.ino"
-# 9 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\onboardCode\\onboardCode.ino" 2
 
-// Define two instances of HardwareSerial for two UART interfaces
-HardwareSerial Phone(2); // UART2
-HardwareSerial Ecvt(0); // UART0
 
-// Pin Assignments *DO NOT CHANGE* ----------------------------------------------------------------------------
+// ANALOG INPUT PIN ASSIGNMENTS
 
-//High Power Outputs
-# 26 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\onboardCode\\onboardCode.ino"
-//Low Power Inputs
-# 52 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\onboardCode\\onboardCode.ino"
-// Variable declarations ----------------------------------------------------------------
 
-// Battery variables
-int rawBattery;
-int batPercent;
+// DIGITAL INPUT PIN ASSIGNMENTS
+# 30 "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\dctProtoCode\\dctProtoCode.ino"
+// Physical position setpoints
+int motorDown = 1000;
+int motorMid = 2000;
+int motorUp = 3000;
 
-const int batLowLimit = 2150;
-const int batHighLimit = 3180;
+// Physical state variables
+int engineRpm = 3600; // Engine RPM
+int drumPos = 0;
 
-// Engine RPM variables:
-unsigned long pulseTime;
-unsigned long prevPulseTime;
-unsigned long magFreq;
-const int magnets = 3;
-int rpm = 0;
+int reverseFlag = 0;
 
-unsigned long magInterval = 0;
+int inputGear = 0; // -1 = Reverse, 0 = Neutral, 1 = 1st gear, 2 = 2nd gear, 3 = 3rd gear, 4 = 4th gear, 5 = 5th gear
 
-// Wheel speed variables:
-int speed;
+int downFlag = 0;
+int upFlag = 0;
 
-// Fuel variables:
-unsigned long fuelStart;
-unsigned long fuelEnd;
-int fuelTime;
-int rawFuel = 0;
-int fuelFlag = 0;
-int fuel = 0;
+int motorCommand = motorMid;
 
-const int fuelLowLimit = 800;
-const int fuelHighLimit = 2000;
+// Automatic shifting variables
+int mode = 0; // 0 = Manual, 1 = Automatic
+int upshiftFlag = 0;
+int downshiftFlag = 0;
 
-// Shock position variables:
-int rawLeftFront = 0;
-int rawRightFront = 0;
-int rawLeftRear = 0;
-int rawRightRear = 0;
+// PID control parameters
+const float Kp = 1.0; // Proportional gain
+const float Ki = 0.0; // Integral gain
+const float Kd = 0.0; // Derivative gain
 
-int leftFront = 0;
-int rightFront = 0;
-int leftRear = 0;
-int rightRear = 0;
+const float Ti = 0.001; // Integral time constant
+const float Td = 0.001; // Derivative time constant
 
-// Driver input variables:
-int panicStatus = 0;
-int muteStatus = 0;
-int lapReset = 0;
-int button4 = 0;
-
-int panicActive = 0;
-
-int lapFlag;
-int muteFlag;
-int panicCount = 0;
-
-unsigned long lapInterval;
-unsigned long muteInterval;
-
-unsigned long muteDebounce;
-unsigned long lapDebounce;
-
-int lapPrevState;
-int mutePrevState;
-
-// ECVT communication
-String incomingEcvtData = "";
-int brakeStatus = 0;
-int launchStatus = 0;
-int ecvtBat = 0;
-int throttlePos = 0;
-int helixPos = 0;
-unsigned long ecvtExportTimer = 0;
-const int ecvtExportInterval = 5;
-
-// Phone communication
-String incomingPhoneData = "";
-int acknowledged = 0;
-unsigned long phoneExportTimer = 0;
-const int phoneExportInterval = 16;
-
-// Global variables
-int lapResetCount = 0;
-const int batSamples = 1000; // Number of samples to consider for moving average
-const int fuelSamples = 1000; // Number of samples to consider for moving average
-int fuelLogger[fuelSamples]; // Array to store PWM samples
-int batLogger[batSamples]; // Array to store PWM samples
-int batIndex = 0; // Index to keep track of the current sample
-int fuelIndex = 0; // Index to keep track of the current sample
-const int debounce = 20;
+int pidElapsedTime = 0; // Elapsed time since last PID update
+unsigned long pidPrevTime = 0; // Previous time for PID update
+float integral = 0.0; // Integral term for PID control
+double previousError = 0.0; // Previous error for derivative term
+int output = 0.0; // PID output
 
 // Function prototypes
-void reverseCheck();
-void batRead();
-void updateBatAverage(int newValue);
-void RPMRead();
-void rpmCalculate();
-void fuelRead();
-void updateFuelAverage(int newValue);
-void shockRead();
-void muteButtonCheck();
-void muteStatusUpdate();
-void lapTimeReset();
-void panicStatusUpdate();
-void lapButtonCheck();
-void readEcvtData();
-void readPhoneData();
-void processEcvtData(String data);
-void processPhoneData(String data);
-void exportPhoneData();
-void exportEcvtData();
+void setClutch(int gear);
+void drumShift(int desiredDrum);
+void shiftController(int commandPos);
+void getDrumPos();
+void shiftUp();
+void shiftDown();
+void autoShift();
+void readOnboardData();
+void processOnboardData(String data);
 
-// The setup() function runs once each time the micro-controller starts
 void setup() {
-  // Initialize serial communication with phone and eCVT
-  Phone.begin(115200, SERIAL_8N1, 16, 17);
-  Ecvt.begin(115200, SERIAL_8N1, 3, 1);
+  // Set solenoid pins as outputs
+  pinMode(2 /* Solenoid 1 connected to pin 2*/, 0x03);
+  pinMode(3 /* Solenoid 2 connected to pin 3*/, 0x03);
+  pinMode(4 /* Shift motor connected to pin 4*/, 0x03);
+  pinMode(5 /* Shift motor connected to pin 5*/, 0x03);
 
-  // Initialize fuel samples array
-  for (int i = 0; i < fuelSamples; i++) {
-    fuelLogger[i] = fuelLowLimit;
-  }
+  // Set gear position sensor pin as input
+  pinMode(6 /* Gear position sensor connected to pin 6*/, 0x01);
 
-  // Initialize battery samples array
-  for (int i = 0; i < batSamples; i++) {
-    batLogger[i] = batLowLimit;
-  }
+  // Set switch pins as inputs
+  pinMode(25 /* Reverse switch connected to pin 7*/, 0x01);
+  pinMode(17 /* Neutral switch connected to pin 8*/, 0x01);
+  pinMode(27 /* 1-2 shift switch connected to pin 9*/, 0x01);
+  pinMode(19 /* 2-N shift switch connected to pin 10*/, 0x01);
+  pinMode(26 /* 2-3 shift switch connected to pin 11*/, 0x01);
+  pinMode(22 /* 3-N shift switch connected to pin 12*/, 0x01);
+  pinMode(2 /* 3-4 shift switch connected to pin 13*/, 0x01);
+  pinMode(24 /* 4-N shift switch connected to pin 14*/, 0x01);
+  pinMode(12 /* 4-5 shift switch connected to pin 15*/, 0x01);
+  pinMode(13 /* 5-N shift switch connected to pin 16*/, 0x01);
 
-  // Initialize regulator pins
-  pinMode(32, 0x03);
-  pinMode(33, 0x03);
-  pinMode(25, 0x03);
-  pinMode(26, 0x03);
-  pinMode(13, 0x03);
-  pinMode(27, 0x03);
-  pinMode(14, 0x03);
+  // Get initial drum position
+  getDrumPos();
 
-  // Initialize sensor pins
-  pinMode(2, 0x01);
-  pinMode(15, 0x01);
-  pinMode(34, 0x01);
-  pinMode(39, 0x01);
-
-  pinMode(23, 0x01);
-  pinMode(35, 0x01);
-  pinMode(22, 0x01);
-  pinMode(36, 0x01);
-  pinMode(19, 0x05);
-
-  pinMode(21, 0x05);
-  pinMode(18, 0x05);
-  pinMode(5, 0x05);
-  pinMode(4, 0x05);
-
-  // Control initial power output
-  digitalWrite(32, 0x1);
-  digitalWrite(33, 0x0);
-  digitalWrite(25, 0x0);
-  digitalWrite(26, 0x1);
-  digitalWrite(13, 0x0);
-  digitalWrite(27, 0x0);
-  digitalWrite(14, 0x0);
-
-  // Attach interrupts
-  attachInterrupt((((23)<40)?(23):-1), RPMRead, 0x02);
-  attachInterrupt((((22)<40)?(22):-1), fuelRead, 0x03);
+  // Initialize serial communication
+  Onboard.begin(9600);
 }
 
-// The loop() function runs continuously after setup()
 void loop() {
-  // Read data from eCVT and phone
-  readEcvtData();
-  readPhoneData();
+  // Read data from UART & Bluetooth
+  readOnboardData();
 
-  // Check lap button and mute button
-  reverseCheck();
-  lapButtonCheck();
-  muteButtonCheck();
-  shockRead();
-
-  // Check if it's time to export data to phone
-  if (millis() - phoneExportTimer >= phoneExportInterval) {
-    // Run non-time critical functions
-
-    // Export data to phone
-    exportPhoneData();
-
-    phoneExportTimer = millis();
+  if(mode == 0){
+    setGear(inputGear);
   }
 
-  // Check if it's time to export data to eCVT
-  if (millis() - ecvtExportTimer >= ecvtExportInterval) {
-    batRead();
+  if(mode == 1){
+    autoShift();
 
-    // Export data to eCVT
-    exportEcvtData();
-
-    ecvtExportTimer = millis();
+    if(upshiftFlag == 1){
+      setGear(drumPos + 1);
+    }
+    else if(downshiftFlag == 1){
+      setGear(drumPos - 1);
+    }
   }
 }
 
-// Function to check reverse sensor and update reverse light
-void reverseCheck() {
-  if (digitalRead(19) == 0x0) {
-    digitalWrite(32, 0x0);
+void setGear(int gear) {
+  getDrumPos();
+
+  int commandGear;
+
+  if(gear < drumPos && drumPos > 0) {
+    commandGear = drumPos - 1;
+  } else if (gear > drumPos && drumPos < 5) {
+    commandGear = drumPos + 1;
+  } else if (gear < drumPos && drumPos == 0 && engineRpm < 1600) {
+    commandGear = drumPos - 1;
   } else {
-    digitalWrite(32, 0x1);
-  }
-}
-
-// Function to read battery voltage and calculate battery percentage
-void batRead() {
-
-  int rawBattery = analogRead(36);
-
-  // Calibrate the reading
-  if(rawBattery > batLowLimit){
-    updateBatAverage(rawBattery);
+    commandGear = drumPos;
   }
 
-}
-
-// Function to update moving average of PWM samples
-void updateBatAverage(int newValue) {
-  batLogger[batIndex] = newValue;
-  batIndex = (batIndex + 1) % batSamples;
-  long sum = 0;
-
-  for (int i = 0; i < batSamples; i++) {
-    sum += batLogger[i];
-  }
-
-  batPercent = map((sum / batSamples), batLowLimit, batHighLimit, 0, 99);
-}
-
-// Function to calculate RPM from pulse time
-void RPMRead() {
-  pulseTime = micros();
-
-  if (pulseTime < prevPulseTime) {
-    // Rollover detected
-    magInterval = (4294967295 - prevPulseTime) + pulseTime;
+  if(commandGear > 0){
+    reverseFlag = 0;
   } else {
-    magInterval = pulseTime - prevPulseTime;
+    reverseFlag = 1;
   }
 
-  if (magInterval > 3000) {
-    rpmCalculate();
-    // Store pulse time
-    prevPulseTime = pulseTime;
+  switch(commandGear) {
+    case -1:
+      drumShift(-1);
+      setClutch(-1);
+      break;
+    case 0:
+      drumShift(0);
+      setClutch(0);
+      break;
+    case 1:
+      setClutch(1);
+      drumShift(1);
+      break;
+    case 2:
+      setClutch(2);
+      drumShift(2);
+      break;
+    case 3:
+      setClutch(3);
+      drumShift(3);
+      break;
+    case 4:
+      setClutch(4);
+      drumShift(4);
+      break;
+    case 5:
+      setClutch(5);
+      drumShift(5);
+      break;
+    default:
+      motorCommand = motorMid;
+      Onboard.print("ERROR: Invalid gear setpoint (" + gear);
+      Onboard.println(")");
+      break;
+  }
+
+  shiftController(motorCommand);
+}
+
+// Sets clutches based on gear input & drum position
+void setClutch(int gear) {
+  getDrumPos();
+
+  switch (gear) {
+    case -1:
+      if(digitalRead(25 /* Reverse switch connected to pin 7*/) == 0x1 && engineRpm < 1600) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x0);
+      }
+      else if (digitalRead(25 /* Reverse switch connected to pin 7*/) == 0x1 && engineRpm > 1600){
+        Onboard.println("ERROR: Current RPM does not match clutch setpoint (Reverse)");
+      } else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (Reverse)");
+      }
+      break;
+    case 0:
+      if(digitalRead(17 /* Neutral switch connected to pin 8*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x1);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x0);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (Neutral)");
+      }
+      break;
+    case 1:
+      if(digitalRead(27 /* 1-2 shift switch connected to pin 9*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x1);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (1st gear)");
+      }
+      break;
+    case 2:
+      if(digitalRead(27 /* 1-2 shift switch connected to pin 9*/) == 0x1 || digitalRead(26 /* 2-3 shift switch connected to pin 11*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x0);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (2nd gear)");
+      }
+      break;
+    case 3:
+      if(digitalRead(26 /* 2-3 shift switch connected to pin 11*/) == 0x1 || digitalRead(2 /* 3-4 shift switch connected to pin 13*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x1);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (3rd gear)");
+      }
+      break;
+    case 4:
+      if(digitalRead(2 /* 3-4 shift switch connected to pin 13*/) || digitalRead(12 /* 4-5 shift switch connected to pin 15*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x0);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (4th gear)");
+      }
+      break;
+    case 5:
+      if(digitalRead(12 /* 4-5 shift switch connected to pin 15*/) || digitalRead(25 /* Reverse switch connected to pin 7*/ /* 5th gear switch connected to pin 7*/) == 0x1) {
+        digitalWrite(2 /* Solenoid 1 connected to pin 2*/, 0x0);
+        digitalWrite(3 /* Solenoid 2 connected to pin 3*/, 0x1);
+      }
+      else {
+        Onboard.println("ERROR: Drum position does not match clutch setpoint (5th gear)");
+      }
+      break;
+    default:
+      Onboard.print("ERROR: Invalid clutch setpoint (" + gear);
+      Onboard.println(")");
+      break;
   }
 }
 
-// Function to calculate RPM from magnetic interval
-void rpmCalculate() {
-  if (magInterval > 0) {
-    // Convert difference into frequency (seconds domain)
-    magFreq = 60000000 / magInterval;
-  }
+// Shifts drum to desired position
+void drumShift(int desiredDrum) {
 
-  // Compensate for pulses per rotation
-  rpm = magFreq / magnets;
-}
+  // Get current motor position
+  int motorPos = analogRead(6 /* Gear position sensor connected to pin 6*/);
+  getDrumPos();
 
-// Function to read fuel sensor and update fuel level
-void fuelRead() {
-  if (digitalRead(22) == 0x1 && fuelFlag == 0) {
-    fuelStart = micros();
-    fuelFlag = 1;
-  } else if (digitalRead(22) == 0x0 && fuelFlag == 1) {
-    fuelEnd = micros();
-    fuelFlag = 0;
-  }
+  // Calculate motor command based on desired shift position
+  if(desiredDrum > drumPos) {
 
-  fuelTime = fuelEnd - fuelStart;
-
-  if (fuelFlag == 0 && fuelTime > fuelLowLimit) {
-    updateFuelAverage(fuelTime);
-  }
-}
-
-// Function to update moving average of PWM samples
-void updateFuelAverage(int newValue) {
-  fuelLogger[fuelIndex] = newValue;
-  fuelIndex = (fuelIndex + 1) % fuelSamples;
-
-  long sum = 0;
-
-  for (int i = 0; i < fuelSamples; i++) {
-    sum += fuelLogger[i];
-  }
-
-  rawFuel = sum / fuelSamples;
-
-  fuel = map(rawFuel, fuelLowLimit, fuelHighLimit, 0, 99);
-}
-
-  // Function to read shock sensor values
-void shockRead() {
-  rawLeftFront = analogRead(2);
-  rawRightFront = analogRead(15);
-  rawLeftRear = analogRead(34);
-  rawRightRear = analogRead(39);
-
-  leftFront = map(leftFront, 900, 4095, 0, 100);
-  rightFront = map(rightFront, 900, 4095, 0, 100);
-  leftRear = map(leftRear, 0, 4095, 0, 100);
-  rightRear = map(rightRear, 0, 4095, 0, 100);
-}
-
-  // Function to check mute button state and update mute status
-void muteButtonCheck() {
-  int buttonState = digitalRead(5);
-
-  if (buttonState != mutePrevState) {
-    muteDebounce = millis();
-  }
-
-  if (millis() - muteDebounce >= debounce) {
-    if (buttonState == 0 && muteFlag == 0) {
-      muteFlag = 1;
-      muteInterval = millis();
+    if(motorPos < motorUp && downFlag == 0) {
+      motorCommand = motorUp;
     }
 
-    if ((millis() - muteInterval) <= 1000 && buttonState == 0x1 && muteFlag == 1) {
-      muteStatusUpdate();
-      muteFlag = 0;
-    } else if ((millis() - muteInterval) > 1000 && buttonState == 0x0 && muteFlag == 1 && launchStatus == 0) {
-      launchStatus = 1;
-    } else if (buttonState == 0x1 && muteFlag == 1) {
-      muteFlag = 0;
-      launchStatus = 0;
+    else if(motorPos > motorMid){
+      downFlag = 1;
+      motorCommand = motorMid;
+    }
+
+    else if(motorPos < motorMid && downFlag == 1){
+      downFlag = 0;
     }
   }
 
-  mutePrevState = buttonState;
+  else if(desiredDrum < drumPos) {
+
+    if(motorPos > motorDown && upFlag == 0) {
+      motorCommand = motorDown;
+    }
+
+    else if(motorPos < motorMid){
+      upFlag = 1;
+      motorCommand = motorMid;
+    }
+
+    else if(motorPos > motorMid && upFlag == 1){
+      upFlag = 0;
+    }
+
+  }
+
+  else {
+    motorCommand = motorMid;
+  }
 }
 
-  // Function to update mute status
-void muteStatusUpdate() {
-  if (muteStatus == 0) {
-    muteStatus = 1;
+// PID controller to shift motor to desired position
+void shiftController(int commandPos){
+
+  // Calculate elapsed time since last PID update
+  unsigned long currentTime = micros();
+  if(currentTime < pidPrevTime) {
+    pidElapsedTime = (currentTime + 4294967295) - pidPrevTime;
   } else {
-    muteStatus = 0;
+    pidElapsedTime = currentTime - pidPrevTime;
   }
-}
 
-void batteryCheck() {
-  if (batPercent < 10) {
-    panicStatusUpdate();
-    panicActive = 1;
-  }
-}
+  // Get current shifter position
+  int motorPos = analogRead(6 /* Gear position sensor connected to pin 6*/);
 
-  // Function to reset lap timer
-void lapTimeReset() {
-  if (lapReset == 0) {
-    lapReset = 1;
+  // Calculate error
+  double error = commandPos - motorPos;
+
+  // Calculate integral term (approximate integral using trapezoidal rule)
+  integral += (error + previousError) * pidElapsedTime / Ti;
+
+  // Calculate derivative term
+  double derivative = (error - previousError) / (pidElapsedTime / Td);
+
+  // Compute PID output
+  output = Kp * error + Ki * integral + Kd * derivative;
+
+  // Update previous values for next iteration
+  previousError = error;
+
+  // Ensure output is within acceptable bounds (e.g., for PWM control)
+  output = ((output)<(-255)?(-255):((output)>(255)?(255):(output)));
+
+  // Update motor speed based on PID output
+  if (output > 0) {
+    analogWrite(4 /* Shift motor connected to pin 4*/, output);
+    digitalWrite(5 /* Shift motor connected to pin 5*/, 0x0);
+  } else if (output < 0) {
+    digitalWrite(4 /* Shift motor connected to pin 4*/, 0x0);
+    analogWrite(5 /* Shift motor connected to pin 5*/, output);
   } else {
-    lapReset = 0;
+    digitalWrite(4 /* Shift motor connected to pin 4*/, 0x0);
+    digitalWrite(5 /* Shift motor connected to pin 5*/, 0x0);
   }
 }
 
-  // Function to update panic status
-void panicStatusUpdate() {
-  if (panicStatus == 0) {
-    panicStatus = 1;
-  } else {
-    panicStatus = 0;
+// Get drum position based on switch inputs
+void getDrumPos(){
+  if(digitalRead(25 /* Reverse switch connected to pin 7*/ == 0x1) && digitalRead(17 /* Neutral switch connected to pin 8*/ == 0x1) && digitalRead(27 /* 1-2 shift switch connected to pin 9*/ == 0x1) && digitalRead(26 /* 2-3 shift switch connected to pin 11*/ == 0x1) && digitalRead(2 /* 3-4 shift switch connected to pin 13*/ == 0x1) && digitalRead(12 /* 4-5 shift switch connected to pin 15*/ == 0x1) && digitalRead(25 /* Reverse switch connected to pin 7*/ /* 5th gear switch connected to pin 7*/ == 0x1) || digitalRead(25 /* Reverse switch connected to pin 7*/ == 0x0) && digitalRead(17 /* Neutral switch connected to pin 8*/ == 0x0) && digitalRead(27 /* 1-2 shift switch connected to pin 9*/ == 0x0) && digitalRead(26 /* 2-3 shift switch connected to pin 11*/ == 0x0) && digitalRead(2 /* 3-4 shift switch connected to pin 13*/ == 0x0) && digitalRead(12 /* 4-5 shift switch connected to pin 15*/ == 0x0) && digitalRead(25 /* Reverse switch connected to pin 7*/ /* 5th gear switch connected to pin 7*/ == 0x0)){
+    drumPos = -2;
+    Onboard.println("ERROR: Invalid drum position");
+  }
+  else if(digitalRead(25 /* Reverse switch connected to pin 7*/) == 0x1 && reverseFlag == 1) {
+    drumPos = -1;
+  }
+  else if(digitalRead(17 /* Neutral switch connected to pin 8*/) == 0x1) {
+    drumPos = 0;
+  }
+  else if(digitalRead(27 /* 1-2 shift switch connected to pin 9*/) == 0x1) {
+    drumPos = 1;
+  }
+  else if(digitalRead(26 /* 2-3 shift switch connected to pin 11*/) == 0x1) {
+    drumPos = 2;
+  }
+  else if(digitalRead(2 /* 3-4 shift switch connected to pin 13*/) == 0x1) {
+    drumPos = 3;
+  }
+  else if(digitalRead(12 /* 4-5 shift switch connected to pin 15*/) == 0x1) {
+    drumPos = 4;
+  }
+  else if(digitalRead(25 /* Reverse switch connected to pin 7*/ /* 5th gear switch connected to pin 7*/) == 0x1) {
+    drumPos = 5;
   }
 }
 
-  // Function to check lap button state and perform corresponding actions
-void lapButtonCheck() {
-  int buttonState = digitalRead(18);
-
-  if (buttonState != lapPrevState) {
-    lapDebounce = millis();
+void autoShift(){
+  if(engineRpm > 3500 && drumPos < 5){
+    upshiftFlag = 1;
   }
+  else if(engineRpm < 2000 && drumPos > 2){
+    downshiftFlag = 1;
+  }
+}
 
-  if (millis() - lapDebounce >= debounce) {
-    if (buttonState == 0x0 && lapFlag == 0 && panicActive == 0) {
-      lapFlag = 1;
-      lapInterval = millis();
-    } else if ((millis() - lapInterval) >= 2000 && buttonState == 0x0 && lapFlag == 1 && panicActive == 0) {
-      // Activate panic if longer than 2 seconds
-      panicStatusUpdate();
-      panicActive = 1;
-    } else if ((millis() - lapInterval) <= 1000 && buttonState == 0x1 && lapFlag == 1) {
-      // Reset lap timer if less than 1 second
-      lapTimeReset();
-      lapFlag = 0;
-    } else if (buttonState == 0x1 && lapFlag == 1) {
-      lapFlag = 0;
-      panicActive = 0;
+// Functions to read data from UART & Bluetooth
+void readOnboardData() {
+ while (Onboard.available() > 0) {
+  char c = Onboard.read();
+
+  if (c == ',') {
+   processOnboardData(incomingOnboardData);
+   incomingOnboardData = "";
+  } else if (c != '\n') {
+   incomingOnboardData += c;
+  }
+ }
+}
+
+// Functions to process data from UART & Bluetooth (FORMAT - "Item:Value")
+void processOnboardData(String data) {
+ int dataIndex = data.indexOf(':');
+
+ if (dataIndex != -1) {
+  String item = data.substring(0, dataIndex);
+
+  if (item == "UP") {
+      upshiftFlag = 1;
+      downshiftFlag = 0;
     }
-  }
-
-  lapPrevState = buttonState;
-}
-
-  // Function to read data from eCVT
-void readEcvtData() {
-  // Read incoming data and append it to the buffer
-  while (Ecvt.available() > 0) {
-    char c = Ecvt.read();
-
-    // Check if a complete message has been received
-    if (c == ',') {
-      // Process the complete message
-      processEcvtData(incomingEcvtData);
-
-      // Clear the buffer for the next message
-      incomingEcvtData = "";
-    } else if(c != '\n'){
-      incomingEcvtData += c;
+    else if (item == "DOWN") {
+      downshiftFlag = 1;
+      upshiftFlag = 0;
     }
-  }
-}
-
-  // Function to read data from phone
-void readPhoneData() {
-  // Read incoming data and append it to the buffer
-  while (Phone.available() > 0) {
-    char c = Phone.read();
-
-    // Check if a complete message has been received
-    if (c == ',') {
-      // Process the complete message
-      processPhoneData(incomingPhoneData);
-
-      // Clear the buffer for the next message
-      incomingPhoneData = "";
-    } else if(c != '\n'){
-      incomingPhoneData += c;
+    else if (item == "MODE") {
+      mode = data.substring(dataIndex + 1).toInt();
     }
-  }
-}
-
-  // Function to process eCVT data
-void processEcvtData(String data) {
-  int dataIndex = data.indexOf(':');
-  if (dataIndex != -1) {
-    String item = data.substring(0, dataIndex);
-
-    if (item == "Brake"){
-      brakeStatus = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Battery"){
-      ecvtBat = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Helix"){
-      helixPos = data.substring(dataIndex + 1).toInt();
+    else if (item == "RPM") {
+      engineRpm = data.substring(dataIndex + 1).toInt();
     }
-  }
-}
-
-  // Function to process phone data
-void processPhoneData(String data) {
-  int dataIndex = data.indexOf(':');
-  if (dataIndex != -1) {
-    String item = data.substring(0, dataIndex);
-
-    if (item == "Confirm"){
-      acknowledged = data.substring(dataIndex + 1).toInt();
-    }
-  }
-}
-
-  // Function to export data to phone
-void exportPhoneData() {
-  Phone.print("RPM:"); // 0-3800
-  Phone.print(rpm);
-  Phone.print(",");
-
-  Phone.print("Speed:"); // 0-40
-  Phone.print(speed);
-  Phone.print(",");
-
-  Phone.print("Battery:"); // 0-100
-  Phone.print(batPercent);
-  Phone.print(",");
-
-  Phone.print("Fuel:"); // 0-100
-  Phone.print(fuel);
-  Phone.print(",");
-
-  // Phone.print("LF:");       // 0-100
-  // Phone.print(leftFront);
-  // Phone.print(",");
-
-  Phone.print("RF:"); // 0-100
-  Phone.print(rightFront);
-  Phone.print(",");
-
-  // Phone.print("LB:");       // 0-100
-  // Phone.print(leftRear);
-  // Phone.print(",");
-
-  // Phone.print("RB:");       // 0-100
-  // Phone.print(rightRear);
-  // Phone.print(",");
-
-  Phone.print("panic:"); // 0-1
-  Phone.print(panicStatus);
-  Phone.print(",");
-
-  Phone.print("mute:"); // 0-1
-  Phone.print(muteStatus);
-  Phone.print(",");
-
-  Phone.print("lapTimer:"); // 0-1
-  Phone.print(lapReset);
-  Phone.print(",");
-
-  Phone.print("eCVT:"); // 0-1
-  Phone.print(ecvtBat);
-  Phone.print(",");
-
-  Phone.print("Launch:"); // 0-1
-  Phone.print(launchStatus);
-  Phone.println(",");
-}
-
-  // Function to export data to eCVT
-void exportEcvtData() {
-  Ecvt.print("Throttle:");
-  Ecvt.print(rawRightFront);
-  Ecvt.print(",");
-
-  Ecvt.print("RPM:");
-  Ecvt.print(rpm);
-  Ecvt.print(",");
-
-  Ecvt.print("Launch:");
-  Ecvt.print(launchStatus);
-  Ecvt.println(",");
+ }
 }

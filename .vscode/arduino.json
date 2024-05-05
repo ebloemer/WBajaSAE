@@ -3,6 +3,6 @@
     "board": "esp32:esp32:esp32doit-devkit-v1",
     "programmer": "esptool",
     "port": "COM7",
-    "sketch": "onboardCode\\onboardCode.ino",
+    "sketch": "dctProtoCode\\dctProtoCode.ino",
     "output": "./build"
 }
