@@ -55,8 +55,8 @@ HardwareSerial Ecvt(0);   // UART0
 int rawBattery;
 int batPercent;
 
-const int batLowLimit = 2150;
-const int batHighLimit = 3180;
+const int batLowLimit = 2430;   //16 volt
+const int batHighLimit = 3200;  //20.5 volt
 
 // Engine RPM variables:
 unsigned long pulseTime;
@@ -78,8 +78,8 @@ int rawFuel = 0;
 int fuelFlag = 0;
 int fuel = 0;
 
-const int fuelLowLimit = 800;
-const int fuelHighLimit = 2000;
+const int fuelLowLimit = 1000;  // semi-calibrated value
+const int fuelHighLimit = 1648; // calibrated value
 
 // Shock position variables:
 int rawLeftFront = 0;
@@ -159,6 +159,7 @@ void processEcvtData(String data);
 void processPhoneData(String data);
 void exportPhoneData();
 void exportEcvtData();
+void vitalCheck();
 
 // The setup() function runs once each time the micro-controller starts
 void setup() {
@@ -219,7 +220,7 @@ void setup() {
 // The loop() function runs continuously after setup()
 void loop() {
   // Read data from eCVT and phone
-  readEcvtData();
+  // readEcvtData();
   readPhoneData();
   
   // Check lap button and mute button
@@ -231,6 +232,7 @@ void loop() {
   // Check if it's time to export data to phone
   if (millis() - phoneExportTimer >= phoneExportInterval) {
     // Run non-time critical functions
+    batRead();
 
     // Export data to phone
     exportPhoneData();
@@ -238,15 +240,15 @@ void loop() {
     phoneExportTimer = millis();
   }
 
-  // Check if it's time to export data to eCVT
-  if (millis() - ecvtExportTimer >= ecvtExportInterval) {
-    batRead();
+  // // Check if it's time to export data to eCVT
+  // if (millis() - ecvtExportTimer >= ecvtExportInterval) {
+  //   batRead();
     
-    // Export data to eCVT
-    exportEcvtData();
+  //   // Export data to eCVT
+  //   exportEcvtData();
 
-    ecvtExportTimer = millis();
-  }
+  //   ecvtExportTimer = millis();
+  // }
 }
 
 // Function to check reverse sensor and update reverse light
@@ -261,7 +263,7 @@ void reverseCheck() {
 // Function to read battery voltage and calculate battery percentage
 void batRead() {
 
-  int rawBattery = analogRead(batterySensor);
+  rawBattery = analogRead(batterySensor);
 
   // Calibrate the reading
   if(rawBattery > batLowLimit){
@@ -347,10 +349,15 @@ void updateFuelAverage(int newValue) {
 
   // Function to read shock sensor values
 void shockRead() {
-  rawLeftFront = analogRead(shockOne);
+/*   rawLeftFront = analogRead(shockOne);
   rawRightFront = analogRead(shockTwo);
   rawLeftRear = analogRead(shockThree);
-  rawRightRear = analogRead(shockFour);
+  rawRightRear = analogRead(shockFour); */
+
+  rawLeftFront = 0;
+  rawRightFront = 0;
+  rawLeftRear = 0;
+  rawRightRear = 0;
 
   leftFront = map(leftFront, 900, 4095, 0, 100);
   rightFront = map(rightFront, 900, 4095, 0, 100);
@@ -395,10 +402,9 @@ void muteStatusUpdate() {
   }
 }
 
-void batteryCheck() {
-  if (batPercent < 10) {
+void vitalCheck() {
+  if (batPercent < 5 || fuel < 5) {
     panicStatusUpdate();
-    panicActive = 1;
   }
 }
 
@@ -521,9 +527,9 @@ void exportPhoneData() {
   Phone.print(rpm);
   Phone.print(",");
 
-  Phone.print("Speed:");   // 0-40
+/*   Phone.print("Speed:");   // 0-40
   Phone.print(speed);
-  Phone.print(",");
+  Phone.print(","); */
 
   Phone.print("Battery:");  // 0-100
   Phone.print(batPercent);
@@ -533,21 +539,21 @@ void exportPhoneData() {
   Phone.print(fuel);
   Phone.print(",");
 
-  // Phone.print("LF:");       // 0-100
-  // Phone.print(leftFront);
-  // Phone.print(",");
+  Phone.print("LF:");       // 0-100
+  Phone.print(leftFront);
+  Phone.print(",");
 
   Phone.print("RF:");  // 0-100
   Phone.print(rightFront);
   Phone.print(",");
 
-  // Phone.print("LB:");       // 0-100
-  // Phone.print(leftRear);
-  // Phone.print(",");
+  Phone.print("LB:");       // 0-100
+  Phone.print(leftRear);
+  Phone.print(",");
 
-  // Phone.print("RB:");       // 0-100
-  // Phone.print(rightRear);
-  // Phone.print(",");
+  Phone.print("RB:");       // 0-100
+  Phone.print(rightRear);
+  Phone.print(",");
 
   Phone.print("panic:");  // 0-1
   Phone.print(panicStatus);
@@ -559,15 +565,15 @@ void exportPhoneData() {
 
   Phone.print("lapTimer:");  // 0-1
   Phone.print(lapReset);
-  Phone.print(",");
-
-  Phone.print("eCVT:");  // 0-1
-  Phone.print(ecvtBat);
-  Phone.print(",");
-
-  Phone.print("Launch:");  // 0-1
-  Phone.print(launchStatus);
   Phone.println(",");
+
+  // Phone.print("eCVT:");  // 0-1
+  // Phone.print(ecvtBat);
+  // Phone.print(",");
+
+  // Phone.print("Launch:");  // 0-1
+  // Phone.print(launchStatus);
+  // Phone.println(",");
 }
 
   // Function to export data to eCVT
