@@ -223,7 +223,7 @@ void loop() {
 
 // Function to check reverse sensor and update reverse light
 void reverseCheck() {
-  if (digitalRead(oldRevSensor) == HIGH) {
+  if (digitalRead(reverseSensor) == HIGH) {
     digitalWrite(revLight, ON);
   } else {
     digitalWrite(revLight, OFF);
