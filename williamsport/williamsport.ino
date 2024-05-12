@@ -9,7 +9,6 @@
 
 // Define two instances of HardwareSerial for two UART interfaces
 HardwareSerial Phone(2);  // UART2
-HardwareSerial Ecvt(0);   // UART0
 
 // Pin Assignments *DO NOT CHANGE* ----------------------------------------------------------------------------
 
@@ -31,10 +30,10 @@ HardwareSerial Ecvt(0);   // UART0
 #define shockFour 39
 
 #define engineSensor 23
-#define wheelSensor 35
+#define reverseSensor 35
 #define fuelSensor 22
 #define batterySensor 36
-#define revSensor 19
+#define oldRevSensor 19
 
 #define phoneRx 16
 #define phoneTx 17
@@ -101,37 +100,21 @@ int button4 = 0;
 
 int panicActive = 0;
 
-int lapFlag;
-int muteFlag;
-int panicCount = 0;
+int lapFlag = 0;
+int panicTimer;
+int panicFlag = 0;
 
-unsigned long lapInterval;
-unsigned long muteInterval;
-
-unsigned long muteDebounce;
 unsigned long lapDebounce;
 
 int lapPrevState;
-int mutePrevState;
-
-// ECVT communication
-String incomingEcvtData = "";
-int brakeStatus = 0;
-int launchStatus = 0;
-int ecvtBat = 0;
-int throttlePos = 0;
-int helixPos = 0;
-unsigned long ecvtExportTimer = 0;
-const int ecvtExportInterval = 5;
 
 // Phone communication
-String incomingPhoneData = "";
 int acknowledged = 0;
+String incomingPhoneData = "";
 unsigned long phoneExportTimer = 0;
 const int phoneExportInterval = 16;
 
 // Global variables
-int lapResetCount = 0;
 const int batSamples = 1000;        // Number of samples to consider for moving average
 const int fuelSamples = 1000;       // Number of samples to consider for moving average
 int fuelLogger[fuelSamples];  // Array to store PWM samples
@@ -150,23 +133,18 @@ void fuelRead();
 void updateFuelAverage(int newValue);
 void shockRead();
 void muteButtonCheck();
-void muteStatusUpdate();
+void vitalCheck();
 void lapTimeReset();
 void panicStatusUpdate();
 void lapButtonCheck();
-void readEcvtData();
 void readPhoneData();
-void processEcvtData(String data);
 void processPhoneData(String data);
 void exportPhoneData();
-void exportEcvtData();
-void vitalCheck();
 
 // The setup() function runs once each time the micro-controller starts
 void setup() {
   // Initialize serial communication with phone and eCVT
   Phone.begin(115200, SERIAL_8N1, phoneRx, phoneTx);
-  Ecvt.begin(115200, SERIAL_8N1, linkRx, linkTx);
   
   // Initialize fuel samples array
   for (int i = 0; i < fuelSamples; i++) {
@@ -194,10 +172,10 @@ void setup() {
   pinMode(shockFour, INPUT);
 
   pinMode(engineSensor, INPUT);
-  pinMode(wheelSensor, INPUT);
+  pinMode(reverseSensor, INPUT);
   pinMode(fuelSensor, INPUT);
   pinMode(batterySensor, INPUT);
-  pinMode(revSensor, INPUT_PULLUP);
+  pinMode(oldRevSensor, INPUT_PULLUP);
 
   pinMode(buttonOne, INPUT_PULLUP);
   pinMode(lapButton, INPUT_PULLUP);
@@ -216,12 +194,13 @@ void setup() {
   // Attach interrupts
   attachInterrupt(digitalPinToInterrupt(engineSensor), RPMRead, FALLING);
   attachInterrupt(digitalPinToInterrupt(fuelSensor), fuelRead, CHANGE);
+
+  lapPrevState = digitalRead(lapButton);
 }
 
 // The loop() function runs continuously after setup()
 void loop() {
   // Read data from eCVT and phone
-  // readEcvtData();
   readPhoneData();
   
   // Check lap button and mute button
@@ -240,21 +219,11 @@ void loop() {
 
     phoneExportTimer = millis();
   }
-
-  // // Check if it's time to export data to eCVT
-  // if (millis() - ecvtExportTimer >= ecvtExportInterval) {
-  //   batRead();
-    
-  //   // Export data to eCVT
-  //   exportEcvtData();
-
-  //   ecvtExportTimer = millis();
-  // }
 }
 
 // Function to check reverse sensor and update reverse light
 void reverseCheck() {
-  if (digitalRead(revSensor) == LOW) {
+  if (digitalRead(oldRevSensor) == HIGH) {
     digitalWrite(revLight, ON);
   } else {
     digitalWrite(revLight, OFF);
@@ -352,59 +321,65 @@ void updateFuelAverage(int newValue) {
 
   // Function to read shock sensor values
 void shockRead() {
-/*   rawLeftFront = analogRead(shockOne);
+  rawLeftFront = analogRead(shockOne);
   rawRightFront = analogRead(shockTwo);
   rawLeftRear = analogRead(shockThree);
-  rawRightRear = analogRead(shockFour); */
+  rawRightRear = analogRead(shockFour);
 
-  rawLeftFront = 0;
-  rawRightFront = 0;
-  rawLeftRear = 0;
-  rawRightRear = 0;
+  // leftFront = map(leftFront, 900, 4095, 0, 100);
+  // rightFront = map(rightFront, 900, 4095, 0, 100);
+  // leftRear = map(leftRear, 0, 4095, 0, 100);
+  // rightRear = map(rightRear, 0, 4095, 0, 100);
 
-  leftFront = map(leftFront, 900, 4095, 0, 100);
-  rightFront = map(rightFront, 900, 4095, 0, 100);
-  leftRear = map(leftRear, 0, 4095, 0, 100);
-  rightRear = map(rightRear, 0, 4095, 0, 100);
+  leftFront = 0;
+  rightFront = 0;
+  leftRear = 0;
+  rightRear = 0;
 }
 
   // Function to check mute button state and update mute status
 void muteButtonCheck() {
-  int buttonState = digitalRead(muteButton);
-
-  if (buttonState != mutePrevState) {
-    muteDebounce = millis();
-  }
-
-  if (millis() - muteDebounce >= debounce) {
-    if (buttonState == 0 && muteFlag == 0) {
-      muteFlag = 1;
-      muteInterval = millis();
-    }
-
-    if ((millis() - muteInterval) <= 1000 && buttonState == HIGH && muteFlag == 1) {
-      muteStatusUpdate();
-      muteFlag = 0;
-    } else if ((millis() - muteInterval) > 1000 && buttonState == LOW && muteFlag == 1 && launchStatus == 0) {
-      launchStatus = 1;
-    } else if (buttonState == HIGH && muteFlag == 1) {
-      muteFlag = 0;
-      launchStatus = 0;
-    }
-  }
-
-  mutePrevState = buttonState;
-}
-
-  // Function to update mute status
-void muteStatusUpdate() {
-  if (muteStatus == 0) {
+    
+  if(!digitalRead(muteButton)){
     muteStatus = 1;
   } else {
     muteStatus = 0;
   }
 }
 
+  // Function to check lap button state and perform corresponding actions
+void lapButtonCheck() {
+  int buttonState = digitalRead(lapButton);
+
+  if (buttonState != lapPrevState) {
+    lapDebounce = millis();
+    lapFlag = 1;
+  }
+
+  if (millis() - lapDebounce >= debounce && lapFlag == 1) {
+    lapFlag = 0;
+    lapTimeReset();
+
+    if(panicFlag == 0){
+      panicTimer = millis();
+    }
+
+    panicFlag++;
+    
+    if(panicFlag > 0 && (millis() - panicTimer) > 3000){
+      panicFlag == 0;
+    }
+
+    if(panicFlag >= 3){
+      panicStatusUpdate();
+      panicFlag = 0;
+    }
+  }
+
+  lapPrevState = buttonState;
+}
+
+// panics when vitals are low
 void vitalCheck() {
   if (batPercent < 5 || fuel < 5) {
     panicStatusUpdate();
@@ -429,54 +404,6 @@ void panicStatusUpdate() {
   }
 }
 
-  // Function to check lap button state and perform corresponding actions
-void lapButtonCheck() {
-  int buttonState = digitalRead(lapButton);
-
-  if (buttonState != lapPrevState) {
-    lapDebounce = millis();
-  }
-
-  if (millis() - lapDebounce >= debounce) {
-    if (buttonState == LOW && lapFlag == 0 && panicActive == 0) {
-      lapFlag = 1;
-      lapInterval = millis();
-    } else if ((millis() - lapInterval) >= 2000 && buttonState == LOW && lapFlag == 1 && panicActive == 0) {
-      // Activate panic if longer than 2 seconds
-      panicStatusUpdate();
-      panicActive = 1;
-    } else if ((millis() - lapInterval) <= 1000 && buttonState == HIGH && lapFlag == 1) {
-      // Reset lap timer if less than 1 second
-      lapTimeReset();
-      lapFlag = 0;
-    } else if (buttonState == HIGH && lapFlag == 1) {
-      lapFlag = 0;
-      panicActive = 0;
-    }
-  }
-
-  lapPrevState = buttonState;
-}
-
-  // Function to read data from eCVT
-void readEcvtData() {
-  // Read incoming data and append it to the buffer
-  while (Ecvt.available() > 0) {
-    char c = Ecvt.read();
-
-    // Check if a complete message has been received
-    if (c == ',') {
-      // Process the complete message
-      processEcvtData(incomingEcvtData);
-
-      // Clear the buffer for the next message
-      incomingEcvtData = "";
-    } else if(c != '\n'){
-      incomingEcvtData += c;
-    }
-  }
-}
-
   // Function to read data from phone
 void readPhoneData() {
   // Read incoming data and append it to the buffer
@@ -492,22 +419,6 @@ void readPhoneData() {
       incomingPhoneData = "";
     } else if(c != '\n'){
       incomingPhoneData += c;
-    }
-  }
-}
-
-  // Function to process eCVT data
-void processEcvtData(String data) {
-  int dataIndex = data.indexOf(':');
-  if (dataIndex != -1) {
-    String item = data.substring(0, dataIndex);
-
-    if (item == "Brake"){
-      brakeStatus = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Battery"){
-      ecvtBat = data.substring(dataIndex + 1).toInt();
-    } else if(item == "Helix"){
-      helixPos = data.substring(dataIndex + 1).toInt();
     }
   }
 }
@@ -529,10 +440,6 @@ void exportPhoneData() {
   Phone.print("RPM:");  // 0-3800
   Phone.print(rpm);
   Phone.print(",");
-
-/*   Phone.print("Speed:");   // 0-40
-  Phone.print(speed);
-  Phone.print(","); */
 
   Phone.print("Battery:");  // 0-100
   Phone.print(batPercent);
@@ -569,27 +476,4 @@ void exportPhoneData() {
   Phone.print("lapTimer:");  // 0-1
   Phone.print(lapReset);
   Phone.println(",");
-
-  // Phone.print("eCVT:");  // 0-1
-  // Phone.print(ecvtBat);
-  // Phone.print(",");
-
-  // Phone.print("Launch:");  // 0-1
-  // Phone.print(launchStatus);
-  // Phone.println(",");
-}
-
-  // Function to export data to eCVT
-void exportEcvtData() {
-  Ecvt.print("Throttle:");
-  Ecvt.print(rawRightFront);
-  Ecvt.print(",");
-
-  Ecvt.print("RPM:");
-  Ecvt.print(rpm);
-  Ecvt.print(",");
-
-  Ecvt.print("Launch:");
-  Ecvt.print(launchStatus);
-  Ecvt.println(",");
 }
