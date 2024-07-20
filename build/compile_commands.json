@@ -1,6 +1,6 @@
 [
  {
-  "directory": "c:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE",
+  "directory": "c:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE",
   "arguments": [
    "C:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\xtensa-esp32-elf-gcc\\esp-2021r2-patch5-8.4.0/bin/xtensa-esp32-elf-g++",
    "-DHAVE_CONFIG_H",
@@ -233,14 +233,14 @@
    "-DESP32",
    "-DCORE_DEBUG_LEVEL=0",
    "-DARDUINO_USB_CDC_ON_BOOT=0",
-   "@C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build/build_opt.h",
-   "@C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build/file_opts",
+   "@C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE\\build/build_opt.h",
+   "@C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE\\build/file_opts",
    "-IC:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\cores\\esp32",
    "-IC:\\Users\\dying\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\2.0.14\\variants\\doitESP32devkitV1",
-   "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\onboardCode.ino.cpp",
+   "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE\\build\\sketch\\williamsport.ino.cpp",
    "-o",
-   "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\onboardCode.ino.cpp.o"
+   "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE\\build\\sketch\\williamsport.ino.cpp.o"
   ],
-  "file": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Github Code\\WBajaSAE\\build\\sketch\\onboardCode.ino.cpp"
+  "file": "C:\\Users\\dying\\OneDrive - The University of Western Ontario\\Western Baja\\Technical work\\Github Code\\WBajaSAE\\build\\sketch\\williamsport.ino.cpp"
  }
 ]

@@ -11,6 +11,8 @@ String incomingOnboardData = "";
 #define shiftMotorFwd 4 // Shift motor connected to pin 4
 #define shiftMotorRev 5 // Shift motor connected to pin 5
 
+#define hydPump 31 // Hydraulic pump enable
+
 // ANALOG INPUT PIN ASSIGNMENTS
 #define shiftPot 6 // Gear position sensor connected to pin 6
 
@@ -27,16 +29,23 @@ String incomingOnboardData = "";
 #define five_neutral_Switch 13 // 5-N shift switch connected to pin 16
 #define five_Switch rev_Switch // 5th gear switch connected to pin 7
 
+#define hydPressure 32
+
+int prevMillis = 0;
+int loopTime = 200;
+
 // Physical position setpoints
 int motorDown = 1000;
 int motorMid = 2000;
 int motorUp = 3000;
 
+int reverseSafe = 1600;
+
 // Physical state variables
 int engineRpm = 3600; // Engine RPM
 int drumPos = 0;
 
-int reverseFlag = 0;
+int reverseFlag = 0;  // Allows for program state due to shared reverse/fifth sensor
 
 int inputGear = 0;  // -1 = Reverse, 0 = Neutral, 1 = 1st gear, 2 = 2nd gear, 3 = 3rd gear, 4 = 4th gear, 5 = 5th gear
 
@@ -64,6 +73,9 @@ float integral = 0.0; // Integral term for PID control
 double previousError = 0.0; // Previous error for derivative term
 int output = 0.0; // PID output
 
+int maxDuty = 100;  // Sets maximum PWM output (up to 255)
+int minDuty = -100; // Sets minimum PWM output (down to -255)
+
 // Function prototypes
 void setClutch(int gear);
 void drumShift(int desiredDrum);
@@ -81,6 +93,10 @@ void setup() {
   pinMode(shiftSolenoid, OUTPUT);
   pinMode(shiftMotorFwd, OUTPUT);
   pinMode(shiftMotorRev, OUTPUT);
+
+  // Hydraulic system setup
+  pinMode(hydPump, OUTPUT);
+  pinMode(hydPressure, INPUT);
 
   // Set gear position sensor pin as input
   pinMode(shiftPot, INPUT);
@@ -108,19 +124,24 @@ void loop() {
   // Read data from UART & Bluetooth
   readOnboardData();
 
-  if(mode == 0){
-    setGear(inputGear);
-  }
+if(millis() - prevMillis > loopTime) {
 
-  if(mode == 1){
-    autoShift();
+    if(mode == 0){
+      setGear(inputGear);
+    }
 
-    if(upshiftFlag == 1){
-      setGear(drumPos + 1);
+    if(mode == 1){
+      autoShift();
+
+      if(upshiftFlag == 1){
+        setGear(drumPos + 1);
+      }
+      else if(downshiftFlag == 1){
+        setGear(drumPos - 1);
+      }
     }
-    else if(downshiftFlag == 1){
-      setGear(drumPos - 1);
-    }
+
+    prevMillis = millis();
   }
 }
 
@@ -133,7 +154,7 @@ void setGear(int gear) {
     commandGear = drumPos - 1;
   } else if (gear > drumPos && drumPos < 5) {
     commandGear = drumPos + 1;
-  } else if (gear < drumPos && drumPos == 0 && engineRpm < 1600) {
+  } else if (gear < drumPos && drumPos == 0 && engineRpm < reverseSafe) {
     commandGear = drumPos - 1;
   } else {
     commandGear = drumPos;
@@ -190,12 +211,12 @@ void setClutch(int gear) {
 
   switch (gear) {
     case -1:
-      if(digitalRead(rev_Switch) == HIGH && engineRpm < 1600) {
+      if(digitalRead(rev_Switch) == HIGH && engineRpm < reverseSafe) {
         digitalWrite(linSolenoid, LOW);
         digitalWrite(shiftSolenoid, LOW);
       }
-      else if (digitalRead(rev_Switch) == HIGH && engineRpm > 1600){
-        Onboard.println("ERROR: Current RPM does not match clutch setpoint (Reverse)");
+      else if (digitalRead(rev_Switch) == HIGH && engineRpm > reverseSafe){
+        Onboard.println("ERROR: Current RPM does not match safe setpoint (Reverse)");
       } else {
         Onboard.println("ERROR: Drum position does not match clutch setpoint (Reverse)");
       }
@@ -337,7 +358,7 @@ void shiftController(int commandPos){
   previousError = error;
 
   // Ensure output is within acceptable bounds (e.g., for PWM control)
-  output = constrain(output, -255, 255);
+  output = constrain(output, minDuty, maxDuty);
 
   // Update motor speed based on PID output
   if (output > 0) {
