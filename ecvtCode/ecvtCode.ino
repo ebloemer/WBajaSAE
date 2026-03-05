@@ -54,7 +54,7 @@ int batIndex = 0;
 
 // Engine RPM variables:
 int commandRpm;
-int rpm = 0;
+int engineRpm = 0;
 
 int rpmVariance = 50;
 
@@ -347,9 +347,9 @@ void setCommandRPM() {
 	commandRpm = map(throttlePos, 0, 100, 1500, 3000);
 	//commandRpm = map(throttlePos, 0, 100, 0, 1000);
 
-	if((rpm+rpmVariance) < commandRpm) {
+	if((engineRpm+rpmVariance) < commandRpm) {
 		openCVT(openSpeed);
-	} else if((rpm-rpmVariance) > commandRpm) {
+	} else if((engineRpm-rpmVariance) > commandRpm) {
 		closeCVT(closeSpeed);
 	} else if (!checkLimits()) {
 		stopCVT();
@@ -490,7 +490,7 @@ void processOnboardData(String data) {
 		} else if (item == "RevB"){
 			reverseB = data.substring(dataIndex + 1).toInt();
 		} else if (item == "RPM") {
-			rpm = data.substring(dataIndex + 1).toInt();
+			engineRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Launch"){
@@ -526,7 +526,7 @@ void processBluetoothData(String data) {
 		} else if (item == "Max"){
 			helixMax = data.substring(dataIndex + 1).toInt();
 		} else if (item == "RPM") {
-			rpm = data.substring(dataIndex + 1).toInt();
+			engineRpm = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Throttle") {
 			rawThrottle = data.substring(dataIndex + 1).toInt();
 		} else if (item == "Launch"){
@@ -565,7 +565,7 @@ void exportOnboardData() {
 	Onboard.print(",");
 
 	Onboard.print("RPM:");
-	Onboard.print(rpm);
+	Onboard.print(engineRpm);
 	Onboard.print(",");
 
 	Onboard.print("Throttle:"); // 0-1
@@ -615,7 +615,7 @@ void exportBluetoothData(){
 	SerialBT.print(",");
 
 	SerialBT.print("RPM:"); // 0-1
-	SerialBT.print(rpm);
+	SerialBT.print(engineRpm);
 	SerialBT.print(",");
 
 	SerialBT.print("Commanded:");

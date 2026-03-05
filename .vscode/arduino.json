@@ -1,8 +1,7 @@
 {
-    "configuration": "FlashFreq=80,UploadSpeed=921600,DebugLevel=none,EraseFlash=none",
-    "board": "esp32:esp32:esp32doit-devkit-v1",
-    "programmer": "esptool",
+    "board": "arduino:avr:uno",
+    "programmer": "arduinoisp",
     "port": "COM5",
-    "sketch": "williamsport\\williamsport.ino",
+    "sketch": "brakePressureCode\\brakePressureCode.ino",
     "output": "./build"
 }

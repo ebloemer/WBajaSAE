@@ -54,7 +54,7 @@ unsigned long pulseTime;
 unsigned long prevPulseTime;
 unsigned long magFreq;
 const int magnets = 3;
-int rpm = 0;
+int engineRpm = 0;
 
 unsigned long magInterval = 0;
 
@@ -155,7 +155,7 @@ void rpmCalculate(){
   }
   
   //compensate for pulses per rotation
-  rpm = (magFreq/magnets);
+  engineRpm = (magFreq/magnets);
 
 }
 
@@ -356,7 +356,7 @@ void loop(){
     //print to serial
 
     Serial.print("RPM:");         //0-3800
-    Serial.print(rpm);
+    Serial.print(engineRpm);
     Serial.print(",");
 
     Serial.print("Speed:");   //0-40

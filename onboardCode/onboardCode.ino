@@ -63,7 +63,7 @@ unsigned long pulseTime;
 unsigned long prevPulseTime;
 unsigned long magFreq;
 const int magnets = 3;
-int rpm = 0;
+int engineRpm = 0;
 
 unsigned long magInterval = 0;
 
@@ -312,7 +312,7 @@ void rpmCalculate() {
   }
 
   // Compensate for pulses per rotation
-  rpm = magFreq / magnets;
+  engineRpm = magFreq / magnets;
 }
 
 // Function to read fuel sensor and update fuel level
@@ -527,7 +527,7 @@ void processPhoneData(String data) {
   // Function to export data to phone
 void exportPhoneData() {
   Phone.print("RPM:");  // 0-3800
-  Phone.print(rpm);
+  Phone.print(engineRpm);
   Phone.print(",");
 
 /*   Phone.print("Speed:");   // 0-40
@@ -586,7 +586,7 @@ void exportEcvtData() {
   Ecvt.print(",");
 
   Ecvt.print("RPM:");
-  Ecvt.print(rpm);
+  Ecvt.print(engineRpm);
   Ecvt.print(",");
 
   Ecvt.print("Launch:");
