@@ -50,7 +50,7 @@ unsigned long flowPreviousTime = 0; // Previous time for flow control PID
 
 // Control loop variables
 float targetTorque = 50.0; // Target torque in Nm
-float targetRpm = 3000.0;   // Target RPM
+float targetPumpRpm = 3000.0;   // Target RPM
 
 // Engine RPM variables:
 unsigned long enginePulse;
@@ -128,7 +128,7 @@ void valveControl() {
     pressureValveValue = 0; // Start with pressure valve closed
     
     getPumpRpm(); // Update pump RPM reading
-    int targetPumpRpm = (primarySprocket / secondarySprocket) * targetRpm; // Calculate target pump RPM based on sprocket ratio
+    int targetPumpRpm = (primarySprocket / secondarySprocket) * targetPumpRpm; // Calculate target pump RPM based on sprocket ratio
     targetPumpRpm = constrain(targetPumpRpm, 0, maxPumpRpm); // Ensure target pump RPM does not exceed target engine RPM
     float error = targetPumpRpm - pumpRpm;
 
