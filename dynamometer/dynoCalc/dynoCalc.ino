@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "HX711.h"
 
 HX711 scale;
@@ -16,15 +17,19 @@ const int pumpPulseSensor = 12;
 
 // Solenoid PWM values
 int flowValveValue = 0;      // Current flow valve setting (0-255)
+int flowValveFrequency = 250; // PWM frequency for flow valve
 int pressureValveValue = 0; // Current pressure valve setting (0-255)
+int pressureValveFrequency = 250; // PWM frequency for pressure valve
+
+int pwmResolution = 12; // PWM resolution (12 bits for 0-4095 range)
 
 // Tunable parameters
 int mode = 0; // 0 = manual, 1 = torque control, 2 = fixed ratio control, 3 = variable ratio control
 int manualPressure = 0; // Manual pressure valve setting (0-100%)
 int manualFlow = 0; // Manual flow valve setting (0-100%)
 
-int maxPressureValve = 250; // Maximum pressure valve setting (98% duty cycle)
-int maxFlowValve = 250; // Maximum flow valve setting (98% duty cycle)
+int maxPressureValve = 0.98 * (pow(2, pwmResolution) - 1); // Maximum pressure valve setting (98% duty cycle)
+int maxFlowValve = 0.98 * (pow(2, pwmResolution) - 1); // Maximum flow valve setting (98% duty cycle)
 
 int primarySprocket = 28; // Teeth on primary sprocket
 int secondarySprocket = 40; // Teeth on secondary sprocket
@@ -132,8 +137,8 @@ void valveControl() {
   }
 
   // Write PWM values to valves
-  analogWrite(flowValve, flowValveValue);
-  analogWrite(pressureValve, pressureValveValue);
+  ledcWrite(flowValve, flowValveValue);
+  ledcWrite(pressureValve, pressureValveValue);
 }
 
 void PIDControl(float error, float &integral, float &previousError, float P, float I, float D, int &valveValue, int maxValve, unsigned long &previousTime) {
@@ -171,6 +176,10 @@ void setup() {
   pinMode(enginePulseSensor, INPUT);
   pinMode(pumpPulseSensor, INPUT);
 
+  // Set PWM frequency and resolution
+  ledcAttach(flowValve, flowValveFrequency, pwmResolution);
+  ledcAttach(pressureValve, pressureValveFrequency, pwmResolution);
+
   // Attach interrupts
   attachInterrupt(digitalPinToInterrupt(enginePulseSensor), engineMagRead, RISING);
   attachInterrupt(digitalPinToInterrupt(pumpPulseSensor), pumpMagRead, RISING);
@@ -180,10 +189,9 @@ void setup() {
 }
 
 void loop() {
-  // Read torque from load cell
-  
+  getEngineRpm();
+
   
   // Control solenoid valves (0-255 PWM)
   valveControl();
-  delay(100);
 }
