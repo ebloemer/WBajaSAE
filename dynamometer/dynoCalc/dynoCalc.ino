@@ -8,8 +8,8 @@ const int DOUT = 16;  // Data pin
 const int CLK = 17;   // Clock pin
 
 // Solenoid Pins
-const int flowValve = 9;      // Flow solenoid PWM
-const int pressureValve = 10;  // Pressure solenoid PWM
+const int flowValveChannel = 9;      // Flow solenoid PWM
+const int pressureValveChannel = 10;  // Pressure solenoid PWM
 
 // RPM Sensor Pins
 const int enginePulseSensor = 11;
@@ -137,8 +137,8 @@ void valveControl() {
   }
 
   // Write PWM values to valves
-  ledcWrite(flowValve, flowValveValue);
-  ledcWrite(pressureValve, pressureValveValue);
+  ledcWrite(flowValveChannel, flowValveValue);
+  ledcWrite(pressureValveChannel, pressureValveValue);
 }
 
 void PIDControl(float error, float &integral, float &previousError, float P, float I, float D, int &valveValue, int maxValve, unsigned long &previousTime) {
@@ -171,14 +171,14 @@ void setup() {
   scale.tare();             // Zero the scale
   
   // Initialize H-Bridge pins
-  pinMode(flowValve, OUTPUT);
-  pinMode(pressureValve, OUTPUT);
+  pinMode(flowValveChannel, OUTPUT);
+  pinMode(pressureValveChannel, OUTPUT);
   pinMode(enginePulseSensor, INPUT);
   pinMode(pumpPulseSensor, INPUT);
 
   // Set PWM frequency and resolution
-  ledcAttach(flowValve, flowValveFrequency, pwmResolution);
-  ledcAttach(pressureValve, pressureValveFrequency, pwmResolution);
+  ledcAttach(flowValveChannel, flowValveFrequency, pwmResolution);
+  ledcAttach(pressureValveChannel, pressureValveFrequency, pwmResolution);
 
   // Attach interrupts
   attachInterrupt(digitalPinToInterrupt(enginePulseSensor), engineMagRead, RISING);
